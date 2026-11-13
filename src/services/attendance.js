@@ -13,10 +13,28 @@ function loadBreaks(attendanceId) {
     .all(attendanceId);
 }
 
+function loadMoves(attendanceId) {
+  return db.get()
+    .prepare('SELECT id, store_id, at FROM store_moves WHERE attendance_id = ? ORDER BY at')
+    .all(attendanceId);
+}
+
+function hydrate(rec) {
+  if (!rec) return null;
+  rec.breaks = loadBreaks(rec.id);
+  rec.moves = loadMoves(rec.id);
+  return rec;
+}
+
 function getRecord(userId, date) {
-  const rec = db.get().prepare('SELECT * FROM attendance WHERE user_id = ? AND work_date = ?').get(userId, date);
-  if (rec) rec.breaks = loadBreaks(rec.id);
-  return rec || null;
+  return hydrate(db.get().prepare('SELECT * FROM attendance WHERE user_id = ? AND work_date = ?').get(userId, date));
+}
+
+/** 現在（最後に）勤務している店舗ID */
+function currentStoreId(rec) {
+  if (!rec) return null;
+  const moves = rec.moves || [];
+  return moves.length ? moves[moves.length - 1].store_id : rec.store_id;
 }
 
 /** 現在勤務中のレコード（退勤未打刻で、出勤から24時間以内） */
@@ -26,8 +44,7 @@ function getOpenRecord(userId, now = new Date()) {
     .get(userId);
   if (!rec) return null;
   if (now - t.parseDateTime(rec.clock_in) >= OPEN_WINDOW_MS) return null;
-  rec.breaks = loadBreaks(rec.id);
-  return rec;
+  return hydrate(rec);
 }
 
 /**
@@ -46,8 +63,11 @@ function getStatus(userId, now = new Date()) {
 
 class PunchError extends Error {}
 
-/** 打刻処理。action: clock_in / break_start / break_end / clock_out */
-function punch(userId, action, now = new Date()) {
+/**
+ * 打刻処理。action: clock_in / break_start / break_end / clock_out / move（店舗移動）
+ * opts.storeId: 出勤・店舗移動先の店舗
+ */
+function punch(userId, action, now = new Date(), opts = {}) {
   const conn = db.get();
   const nowStr = t.toLocalISO(now);
   return conn.transaction(() => {
@@ -59,11 +79,22 @@ function punch(userId, action, now = new Date()) {
         const date = t.today(now);
         const existing = conn.prepare('SELECT id, clock_in FROM attendance WHERE user_id = ? AND work_date = ?').get(userId, date);
         if (existing && existing.clock_in) throw new PunchError('本日の出勤記録がすでにあります。');
+        const chosen = opts.storeId && conn.prepare('SELECT id FROM stores WHERE id = ? AND active = 1').get(Number(opts.storeId));
+        const storeId = chosen ? chosen.id : defaultStoreId(userId, date);
         if (existing) {
-          conn.prepare("UPDATE attendance SET clock_in = ?, updated_at = datetime('now','localtime') WHERE id = ?").run(nowStr, existing.id);
+          conn.prepare("UPDATE attendance SET clock_in = ?, store_id = ?, updated_at = datetime('now','localtime') WHERE id = ?").run(nowStr, storeId, existing.id);
           return existing.id;
         }
-        return conn.prepare('INSERT INTO attendance(user_id, work_date, clock_in) VALUES (?,?,?)').run(userId, date, nowStr).lastInsertRowid;
+        return conn.prepare('INSERT INTO attendance(user_id, work_date, clock_in, store_id) VALUES (?,?,?,?)').run(userId, date, nowStr, storeId).lastInsertRowid;
+      }
+      case 'move': {
+        if (status.state !== 'working') throw new PunchError('勤務中のみ店舗を移動できます（休憩中は休憩を終了してください）。');
+        const to = Number(opts.storeId);
+        const store = to && conn.prepare('SELECT id FROM stores WHERE id = ? AND active = 1').get(to);
+        if (!store) throw new PunchError('移動先の店舗を選択してください。');
+        if (currentStoreId(status.record) === to) throw new PunchError('すでにその店舗で勤務中です。');
+        conn.prepare('INSERT INTO store_moves(attendance_id, store_id, at) VALUES (?,?,?)').run(status.record.id, to, nowStr);
+        return status.record.id;
       }
       case 'break_start': {
         if (status.state !== 'working') throw new PunchError('勤務中ではないため休憩を開始できません。');
@@ -104,14 +135,25 @@ function saveRecord(userId, date, data) {
       id = existing.id;
       conn.prepare("UPDATE attendance SET clock_in = ?, clock_out = ?, note = ?, updated_at = datetime('now','localtime') WHERE id = ?")
         .run(data.clockIn, data.clockOut || null, data.note || null, id);
+      if (data.storeId !== undefined) conn.prepare('UPDATE attendance SET store_id = ? WHERE id = ?').run(data.storeId || null, id);
       conn.prepare('DELETE FROM breaks WHERE attendance_id = ?').run(id);
     } else {
-      id = conn.prepare('INSERT INTO attendance(user_id, work_date, clock_in, clock_out, note) VALUES (?,?,?,?,?)')
-        .run(userId, date, data.clockIn, data.clockOut || null, data.note || null).lastInsertRowid;
+      const storeId = data.storeId !== undefined ? data.storeId || null : defaultStoreId(userId, date);
+      id = conn.prepare('INSERT INTO attendance(user_id, work_date, clock_in, clock_out, note, store_id) VALUES (?,?,?,?,?,?)')
+        .run(userId, date, data.clockIn, data.clockOut || null, data.note || null, storeId).lastInsertRowid;
     }
     const ins = conn.prepare('INSERT INTO breaks(attendance_id, start_at, end_at) VALUES (?,?,?)');
     for (const b of data.breaks || []) ins.run(id, b.start, b.end || null);
   })();
+}
+
+/** 既定の勤務店舗: その日のシフトの店舗 → 所属店舗 */
+function defaultStoreId(userId, date) {
+  const conn = db.get();
+  const sh = conn.prepare('SELECT store_id FROM shifts WHERE user_id = ? AND work_date = ?').get(userId, date);
+  if (sh && sh.store_id) return sh.store_id;
+  const u = conn.prepare('SELECT store_id FROM users WHERE id = ?').get(userId);
+  return u ? u.store_id : null;
 }
 
 /** 期間内の会社休日 Map */
@@ -144,11 +186,19 @@ function buildPeriod(user, start, end, now = new Date(), settings = settingsLib.
   const recMap = new Map();
   if (recs.length) {
     const ids = recs.map((r) => r.id);
-    const brs = conn.prepare(`SELECT attendance_id, start_at, end_at FROM breaks WHERE attendance_id IN (${ids.map(() => '?').join(',')}) ORDER BY start_at`).all(...ids);
-    for (const r of recs) { r.breaks = []; recMap.set(r.work_date, r); }
+    const ph = ids.map(() => '?').join(',');
+    const brs = conn.prepare(`SELECT attendance_id, start_at, end_at FROM breaks WHERE attendance_id IN (${ph}) ORDER BY start_at`).all(...ids);
+    const mvs = conn.prepare(`SELECT attendance_id, store_id, at FROM store_moves WHERE attendance_id IN (${ph}) ORDER BY at`).all(...ids);
+    for (const r of recs) { r.breaks = []; r.moves = []; recMap.set(r.work_date, r); }
     const byId = new Map(recs.map((r) => [r.id, r]));
     for (const b of brs) byId.get(b.attendance_id).breaks.push(b);
+    for (const m of mvs) byId.get(m.attendance_id).moves.push(m);
   }
+  const shiftMap = new Map(
+    conn.prepare('SELECT * FROM shifts WHERE user_id = ? AND work_date BETWEEN ? AND ? AND published = 1').all(user.id, start, end)
+      .map((s) => [s.work_date, s])
+  );
+  const isPart = user.employment_type === 'part';
   const leaves = conn.prepare('SELECT leave_date, leave_type FROM leaves WHERE user_id = ? AND leave_date BETWEEN ? AND ?').all(user.id, start, end);
   const leaveMap = new Map(leaves.map((l) => [l.leave_date, l.leave_type]));
   const pending = conn.prepare("SELECT start_date, end_date, type FROM requests WHERE user_id = ? AND status = 'pending' AND end_date >= ? AND start_date <= ?").all(user.id, start, end);
@@ -158,11 +208,21 @@ function buildPeriod(user, start, end, now = new Date(), settings = settingsLib.
 
   const days = t.eachDate(start, end).map((date) => {
     const dt = dayType(date, settings, companyMap);
+    const shift = shiftMap.get(date) || null;
+    // シフト制（パート・アルバイト）: 休日の概念はなく、シフトがある日が出勤予定日。法定労働時間(8h)超を残業とする
+    const daySchedule = shift
+      ? { start: shift.start_time, end: shift.end_time, standardMinutes: isPart ? 480 : schedule.standardMinutes }
+      : isPart ? { start: null, end: null, standardMinutes: 480 } : schedule;
     const d = calc.computeDay({
       date, record: recMap.get(date) || null, now,
-      isOffDay: dt.isOffDay, offReason: dt.offReason,
-      leaveType: leaveMap.get(date) || null, schedule, settings,
+      isOffDay: isPart ? false : dt.isOffDay, offReason: isPart ? null : dt.offReason,
+      scheduled: isPart ? !!shift : (!dt.isOffDay || !!shift),
+      leaveType: leaveMap.get(date) || null, schedule: daySchedule, settings,
     });
+    d.shift = shift;
+    d.holidayName = dt.offReason;
+    d.storeId = (recMap.get(date) || {}).store_id || null;
+    d.moves = (recMap.get(date) || {}).moves || [];
     if (hireDate && date < hireDate) d.noRecord = false; // 入社前
     d.hasPending = pending.some((p) => p.start_date <= date && date <= p.end_date);
     d.breaks = (recMap.get(date) || {}).breaks || [];
@@ -183,6 +243,6 @@ function paidLeaveBalance(userId) {
 }
 
 module.exports = {
-  PunchError, getRecord, getOpenRecord, getStatus, punch, saveRecord,
+  PunchError, getRecord, currentStoreId, defaultStoreId, getOpenRecord, getStatus, punch, saveRecord,
   buildMonth, buildPeriod, dayType, companyHolidays, scheduleOf, paidLeaveBalance,
 };

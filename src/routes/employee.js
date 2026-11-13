@@ -6,6 +6,10 @@ const { LEAVE_TYPES } = require('../lib/calc');
 const { parseAttendanceForm, recordToForm, str } = require('../lib/forms');
 const att = require('../services/attendance');
 const reqs = require('../services/requests');
+const pay = require('../lib/pay');
+const storesSvc = require('../services/stores');
+const shiftsSvc = require('../services/shifts');
+const labor = require('../services/labor');
 const { requireLogin } = require('../middleware/auth');
 
 const router = express.Router();
@@ -21,32 +25,73 @@ router.get('/', (req, res) => {
   const workDate = status.record ? status.record.work_date : t.today(now);
   const todayRow = att.buildPeriod(user, workDate, workDate, now, req.settings).days[0];
   const alerts = sheet.days.filter((d) => (d.noRecord || d.missingClockOut) && !d.hasPending);
+  const stores = storesSvc.list();
+  const upcoming = shiftsSvc.list({ userId: user.id, start: t.today(now), end: t.addDays(t.today(now), 13), publishedOnly: true });
+  const hasWage = !!user.hourly_wage;
   res.render('dashboard', {
     title: '打刻',
     status,
     todayRow,
     sheet,
     alerts,
+    stores,
+    currentStoreId: status.record && (status.state === 'working' || status.state === 'break') ? att.currentStoreId(status.record) : null,
+    defaultStoreId: att.defaultStoreId(user.id, t.today(now)),
+    upcoming,
+    monthPay: hasWage ? pay.periodPay(sheet.days, user, req.settings) : null,
+    yearPay: hasWage ? labor.yearToDate(user, req.settings, now) : null,
+    yen: pay.yen,
     balance: att.paidLeaveBalance(user.id),
     myPending: reqs.list({ userId: user.id, status: 'pending', limit: 5 }),
     now,
   });
 });
 
-const PUNCH_LABELS = { clock_in: '出勤', break_start: '休憩開始', break_end: '休憩終了', clock_out: '退勤' };
+const PUNCH_LABELS = { clock_in: '出勤', break_start: '休憩開始', break_end: '休憩終了', clock_out: '退勤', move: '店舗移動' };
 
 router.post('/punch', (req, res, next) => {
   const action = req.body.action;
   try {
     const now = new Date();
-    const id = att.punch(req.user.id, action, now);
-    audit.log(req, `punch.${action}`, 'attendance', id, { at: t.toLocalISO(now) });
+    const storeId = Number(req.body.store_id) || null;
+    const id = att.punch(req.user.id, action, now, { storeId });
+    audit.log(req, `punch.${action}`, 'attendance', id, { at: t.toLocalISO(now), ...(storeId ? { store: storeId } : {}) });
     req.flash('success', `${PUNCH_LABELS[action]}を記録しました（${t.toLocalISO(now).slice(11, 16)}）。`);
   } catch (e) {
     if (!(e instanceof att.PunchError)) return next(e);
     req.flash('error', e.message);
   }
   res.redirect('/');
+});
+
+// ---- シフト（確認・希望提出） ----
+router.get('/shifts', (req, res) => {
+  const today = t.today();
+  const start = t.isValidDate(req.query.start) && req.query.start >= today ? req.query.start : today;
+  const end = t.addDays(start, 27);
+  const dates = t.eachDate(start, end);
+  const mine = shiftsSvc.list({ userId: req.user.id, start, end, publishedOnly: true });
+  const shiftMap = new Map(mine.map((s) => [s.work_date, s]));
+  const reqMap = new Map(shiftsSvc.listRequests({ userIds: [req.user.id], start, end }).map((r) => [r.work_date, r]));
+  res.render('shifts', { title: 'シフト', dates, start, shiftMap, reqMap, errors: [], pay });
+});
+
+router.post('/shifts/requests', (req, res) => {
+  const dates = [].concat(req.body.date || []);
+  const kinds = [].concat(req.body.kind || []);
+  const starts = [].concat(req.body.start_time || []);
+  const ends = [].concat(req.body.end_time || []);
+  const notes = [].concat(req.body.note || []);
+  const entries = dates.map((date, i) => ({ date, kind: kinds[i] || '', start: (starts[i] || '').trim(), end: (ends[i] || '').trim(), note: (notes[i] || '').trim() }));
+  try {
+    const n = shiftsSvc.saveRequests(req.user.id, entries);
+    audit.log(req, 'shift.request', 'user', req.user.id, { count: n });
+    req.flash('success', '希望シフトを提出しました。');
+  } catch (e) {
+    if (!(e instanceof shiftsSvc.ShiftError)) throw e;
+    req.flash('error', e.message);
+  }
+  res.redirect(`/shifts${t.isValidDate(req.body.start) ? '?start=' + req.body.start : ''}`);
 });
 
 // ---- 勤務表 ----

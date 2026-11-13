@@ -293,3 +293,103 @@ table.list tr.selected td { background: var(--primary-soft); }
   .sheet td, th { padding: 3px 5px; }
   .stats-wide { grid-template-columns: repeat(8, 1fr); }
 }
+
+/* ---------- 飲食店向け: 店舗・シフト・人件費 ---------- */
+.tag-store { background: var(--violet-soft); border-color: var(--violet); color: var(--violet); }
+.today-shift { margin: -6px 0 14px; font-size: .92rem; }
+.store-select { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; text-align: left; font-size: .85rem; color: var(--muted); }
+.move-form { display: flex; gap: 8px; margin-top: 12px; }
+.move-form select { flex: 1; min-height: 36px; padding: 4px 8px; }
+.stat-accent { background: var(--primary-soft) !important; }
+.stat-accent .stat-value { color: var(--primary); }
+.pay-detail { margin-top: 10px; }
+.pay-detail summary { cursor: pointer; color: var(--primary); }
+.income { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.income-value { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+progress.meter { width: 100%; height: 10px; margin: 8px 0 4px; appearance: none; -webkit-appearance: none; border: 0; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+progress.meter::-webkit-progress-bar { background: var(--surface-2); border-radius: 999px; }
+progress.meter::-webkit-progress-value { background: var(--success); border-radius: 999px; }
+progress.meter::-moz-progress-bar { background: var(--success); border-radius: 999px; }
+progress.meter-warn::-webkit-progress-value { background: var(--warn); }
+progress.meter-warn::-moz-progress-bar { background: var(--warn); }
+.text-sun { color: var(--sun); }
+.text-sat { color: var(--sat); }
+.tiny { font-size: .7rem; }
+
+/* 希望シフト */
+.shift-req-table td { padding: 6px 8px; }
+.shift-req-table select, .shift-req-table input { min-height: 36px; padding: 4px 8px; }
+.shift-req-table .time-range { display: flex; align-items: center; gap: 4px; }
+.shift-req-table .time-range input { width: 110px; }
+.shift-req-table .tilde { padding: 0; }
+.shift-req-table tr.sun .day-cell { color: var(--sun); }
+.shift-req-table tr.sat .day-cell { color: var(--sat); }
+.shift-req-table tr.locked td { background: var(--surface-2); }
+input.is-off { opacity: .4; }
+.sticky-actions { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; }
+
+/* シフト表 */
+.shift-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.legend { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+.lg { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 8px; border: 1px solid var(--border); }
+.lg-pub, .sg-cell.pub .sg-btn { background: var(--primary-soft); border-color: var(--primary); }
+.lg-draft, .sg-cell.draft .sg-btn { background: var(--amber-soft); border-color: var(--amber); border-style: dashed; }
+.lg-ok { background: var(--success-soft); border-color: var(--success); }
+.lg-ng { background: var(--warn-soft); border-color: var(--warn); }
+.shift-grid { min-width: 720px; }
+.shift-grid th, .shift-grid td { text-align: center; padding: 4px; border-left: 1px solid var(--border); }
+.shift-grid th.sun { color: var(--sun); }
+.shift-grid th.sat { color: var(--sat); }
+.shift-grid th.today { background: var(--primary-soft); }
+.shift-grid .sg-name { text-align: left; min-width: 110px; position: sticky; left: 0; background: var(--surface); z-index: 1; border-left: 0; }
+.shift-grid thead .sg-name { background: var(--surface-2); z-index: 2; }
+.shift-grid .sg-name .tiny { display: block; }
+.shift-grid tfoot th, .shift-grid tfoot td { background: var(--surface-2); border-top: 2px solid var(--border); }
+.sg-cell { min-width: 76px; }
+.sg-btn {
+  width: 100%; min-height: 52px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text);
+  font: inherit; font-size: .82rem; line-height: 1.25; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2px;
+}
+.sg-btn:hover:not(:disabled) { border-color: var(--primary); }
+.sg-btn:disabled { cursor: default; }
+.sg-cell.ok .sg-btn { background: var(--success-soft); }
+.sg-cell.ng .sg-btn { background: var(--warn-soft); }
+.sg-cell.other .sg-btn { background: var(--violet-soft); color: var(--violet); }
+.sg-time { font-weight: 600; font-variant-numeric: tabular-nums; }
+.sg-req { font-weight: 700; }
+.sg-cell.ok .sg-req { color: var(--success); }
+.sg-cell.ng .sg-req { color: var(--warn); }
+.sg-empty { color: var(--border); font-size: 1.1rem; }
+.sg-btn:hover .sg-empty { color: var(--primary); }
+.sg-leave { color: var(--success); font-weight: 600; }
+.dialog { border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; width: min(480px, calc(100vw - 32px)); background: var(--surface); color: var(--text); }
+.dialog::backdrop { background: rgba(15, 23, 42, .45); }
+.dialog h2 { margin-top: 0; }
+.form-actions .spacer { flex: 1; }
+
+/* 人件費 */
+.labor-table .input-num { width: 130px; text-align: right; min-height: 34px; padding: 4px 8px; }
+.labor-table tr.today td { background: var(--primary-soft); }
+
+/* 店舗 */
+.store-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0; }
+.store-row input[name="name"] { flex: 1 1 160px; width: auto; }
+.store-row input[type="number"] { width: 90px; }
+
+@media print {
+  .shift-actions, .shift-grid .sg-empty { display: none !important; }
+}
+
+@media (max-width: 640px) {
+  .shift-req-table { min-width: 0; }
+  .shift-req-table thead { display: none; }
+  .shift-req-table tr { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); align-items: center; }
+  .shift-req-table td { border: 0; padding: 0; }
+  .shift-req-table td:nth-child(3), .shift-req-table td:nth-child(4), .shift-req-table td:nth-child(5) { grid-column: 1 / -1; }
+  .shift-req-table .time-range input { flex: 1; width: auto; }
+  .shift-req-table .col-note { max-width: none; }
+  .shift-req-table td.col-note input::placeholder { color: var(--muted); }
+}
+@media (max-width: 640px) {
+  .shift-req-table tr.locked td:nth-child(n+3) { display: none; }
+}

@@ -82,5 +82,45 @@
     });
 
     document.querySelectorAll('[data-print]').forEach((b) => b.addEventListener('click', () => window.print()));
+
+    // シフト表: セルをクリックして編集ダイアログを開く
+    const dialog = document.querySelector('[data-shift-dialog]');
+    if (dialog) {
+      const f = (name) => dialog.querySelector(`[data-f="${name}"]`);
+      document.querySelectorAll('[data-shift-edit]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const d = btn.dataset;
+          f('user').value = d.user;
+          f('date').value = d.date;
+          f('title').textContent = `${d.name} — ${d.date}`;
+          f('request').textContent = d.request;
+          f('start').value = d.start;
+          f('end').value = d.end;
+          f('break').value = d.break;
+          f('note').value = d.note;
+          f('delete').hidden = !d.exists;
+          if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+          f('start').focus();
+        });
+      });
+      dialog.querySelectorAll('[data-dialog-close]').forEach((b) => b.addEventListener('click', () => dialog.close()));
+      dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
+    }
+
+    // 希望シフト: 「休み希望」「未入力」の行は時間帯を入力不可にする
+    // ※ disabled にすると送信されず配列の位置がずれるため readOnly を使う
+    document.querySelectorAll('select[data-kind]').forEach((sel) => {
+      if (sel.disabled) return;
+      const sync = () => {
+        const on = sel.value === 'available';
+        sel.closest('tr').querySelectorAll('input[type="time"]').forEach((i) => {
+          i.readOnly = !on;
+          i.classList.toggle('is-off', !on);
+          if (!on) i.value = '';
+        });
+      };
+      sel.addEventListener('change', sync);
+      sync();
+    });
   });
 })();

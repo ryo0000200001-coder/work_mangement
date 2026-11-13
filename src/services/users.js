@@ -34,8 +34,13 @@ function count() {
   return db.get().prepare('SELECT COUNT(*) AS c FROM users').get().c;
 }
 
-function list({ includeInactive = true } = {}) {
-  return db.get().prepare(`SELECT * FROM users ${includeInactive ? '' : 'WHERE active = 1'} ORDER BY active DESC, department, login_id`).all();
+/** storeId を指定するとその店舗所属のユーザーのみ */
+function list({ includeInactive = true, storeId = null } = {}) {
+  const where = [];
+  const args = [];
+  if (!includeInactive) where.push('active = 1');
+  if (storeId) { where.push('store_id = ?'); args.push(storeId); }
+  return db.get().prepare(`SELECT * FROM users ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY active DESC, store_id, department, login_id`).all(...args);
 }
 
 /** フォーム入力を検証。errors と値を返す */
@@ -46,7 +51,12 @@ function parseUserForm(body, { isNew }) {
     name: str(body.name),
     email: str(body.email) || null,
     department: str(body.department) || null,
-    role: body.role === 'admin' ? 'admin' : 'employee',
+    role: ['admin', 'manager'].includes(body.role) ? body.role : 'employee',
+    employment_type: body.employment_type === 'part' ? 'part' : 'full',
+    store_id: Number(body.store_id) || null,
+    hourly_wage: null,
+    commute_per_day: null,
+    annual_income_limit: null,
     active: body.active === '1' || body.active === 'on' ? 1 : 0,
     work_start: str(body.work_start),
     work_end: str(body.work_end),
@@ -66,6 +76,17 @@ function parseUserForm(body, { isNew }) {
     if (!Number.isFinite(n) || n <= 0 || n > 24) errors.push('所定労働時間は 0〜24 の数値（時間）で入力してください。');
     else v.standard_minutes = Math.round(n * 60);
   }
+  const yenField = (key, label, max) => {
+    const raw = str(body[key]).replace(/[,，円]/g, '');
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0 || n > max) { errors.push(`${label}は 0〜${max.toLocaleString()} の整数（円）で入力してください。`); return null; }
+    return n;
+  };
+  v.hourly_wage = yenField('hourly_wage', '時給', 100000);
+  v.commute_per_day = yenField('commute_per_day', '交通費', 100000);
+  v.annual_income_limit = yenField('annual_income_limit', '年収の目安上限', 100000000);
+  if (v.role === 'manager' && !v.store_id) errors.push('店長には担当店舗を設定してください。');
   if (isNew || v.password) {
     const pe = validatePassword(v.password);
     if (pe) errors.push(pe);
@@ -75,16 +96,22 @@ function parseUserForm(body, { isNew }) {
 
 function create(v, { mustChangePassword = true } = {}) {
   return db.get().prepare(`
-    INSERT INTO users(login_id, name, email, department, role, password_hash, must_change_password, work_start, work_end, standard_minutes, hire_date)
-    VALUES (@login_id, @name, @email, @department, @role, @password_hash, @must_change, @work_start, @work_end, @standard_minutes, @hire_date)`)
-    .run({ ...v, password_hash: hashPassword(v.password), must_change: mustChangePassword ? 1 : 0 }).lastInsertRowid;
+    INSERT INTO users(login_id, name, email, department, role, password_hash, must_change_password, work_start, work_end, standard_minutes, hire_date,
+      employment_type, store_id, hourly_wage, commute_per_day, annual_income_limit)
+    VALUES (@login_id, @name, @email, @department, @role, @password_hash, @must_change, @work_start, @work_end, @standard_minutes, @hire_date,
+      @employment_type, @store_id, @hourly_wage, @commute_per_day, @annual_income_limit)`)
+    .run({
+      employment_type: 'full', store_id: null, hourly_wage: null, commute_per_day: null, annual_income_limit: null,
+      ...v, password_hash: hashPassword(v.password), must_change: mustChangePassword ? 1 : 0,
+    }).lastInsertRowid;
 }
 
 function update(id, v) {
   db.get().prepare(`
     UPDATE users SET login_id=@login_id, name=@name, email=@email, department=@department, role=@role, active=@active,
       work_start=@work_start, work_end=@work_end, standard_minutes=@standard_minutes, hire_date=@hire_date,
-      updated_at=datetime('now','localtime')
+      employment_type=@employment_type, store_id=@store_id, hourly_wage=@hourly_wage, commute_per_day=@commute_per_day,
+      annual_income_limit=@annual_income_limit, updated_at=datetime('now','localtime')
     WHERE id=@id`).run({ ...v, id });
 }
 

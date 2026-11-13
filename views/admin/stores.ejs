@@ -1,0 +1,38 @@
+<%- include('../partials/header') %>
+<div class="page-head"><h1>店舗</h1></div>
+<section class="card">
+  <h2>店舗を登録</h2>
+  <form method="post" action="/admin/stores" class="form-row">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <label>店舗名<input name="name" required maxlength="50" placeholder="例: 渋谷店"></label>
+    <label>平日の必要人数<input type="number" name="required_weekday" min="0" value="0"></label>
+    <label>土日祝の必要人数<input type="number" name="required_weekend" min="0" value="0"></label>
+    <button class="btn btn-primary" type="submit">登録</button>
+  </form>
+</section>
+<div class="table-wrap">
+  <table class="list">
+    <thead><tr><th colspan="4">店舗名 ／ 必要人数（平日・土日祝） ／ 有効</th><th class="num">所属スタッフ</th><th></th></tr></thead>
+    <tbody>
+    <% for (const s of stores) { %>
+      <tr class="<%= s.active ? '' : 'inactive' %>">
+        <td colspan="4">
+          <form method="post" action="/admin/stores/<%= s.id %>" class="store-row">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input name="name" value="<%= s.name %>" required maxlength="50" aria-label="店舗名">
+            <input type="number" name="required_weekday" min="0" value="<%= s.required_weekday %>" aria-label="平日の必要人数">
+            <input type="number" name="required_weekend" min="0" value="<%= s.required_weekend %>" aria-label="土日祝の必要人数">
+            <label class="check"><input type="checkbox" name="active" value="1" <%= s.active ? 'checked' : '' %>> 有効</label>
+            <button class="btn btn-sm" type="submit">保存</button>
+          </form>
+        </td>
+        <td class="num"><%= s.staffCount %>人</td>
+        <td class="nowrap"><a href="/admin/shifts?store=<%= s.id %>">シフト</a> ／ <a href="/admin/labor?store=<%= s.id %>">人件費</a></td>
+      </tr>
+    <% } %>
+    <% if (!stores.length) { %><tr><td colspan="6" class="muted">店舗が登録されていません。</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+<p class="muted small">必要人数はシフト表で人数の過不足を確認するための目安です（0 の場合は表示しません）。</p>
+<%- include('../partials/footer') %>

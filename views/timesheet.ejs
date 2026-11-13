@@ -4,6 +4,13 @@
   const today = t.today();
   const base = isAdminView ? `/admin/timesheets?user=${target.id}&` : '/timesheet?';
   const fmtB = (m) => t.fmtMinutes(m, { blankZero: true });
+  const hasShifts = target.employment_type === 'part' || sheet.days.some((d) => d.shift);
+  const multiStore = storeNames.size > 1;
+  const storeLabel = (d) => {
+    if (!d.hasRecord) return '';
+    const names = [d.storeId, ...d.moves.map((m) => m.store_id)].filter((x, i, a) => x && a.indexOf(x) === i).map((x) => storeNames.get(x) || '');
+    return names.join('→');
+  };
 %>
 <div class="page-head">
   <div>
@@ -50,7 +57,7 @@
 <table class="sheet">
   <thead>
     <tr>
-      <th>日付</th><th>区分</th><th>出勤</th><th>退勤</th><th>休憩</th><th>労働</th>
+      <th>日付</th><th>区分</th><% if (hasShifts) { %><th>シフト</th><% } %><% if (multiStore) { %><th>店舗</th><% } %><th>出勤</th><th>退勤</th><th>休憩</th><th>労働</th>
       <th>残業</th><th>深夜</th><th>休日</th><th>遅刻</th><th>早退</th><th class="col-note">備考</th><th class="no-print"></th>
     </tr>
   </thead>
@@ -65,6 +72,8 @@
         <% if (d.isOffDay) { %><span class="tag tag-off"><%= d.offReason || '休日' %></span><% } %>
         <% if (d.hasPending) { %><span class="tag tag-pending">申請中</span><% } %>
       </td>
+      <% if (hasShifts) { %><td class="num muted"><%= d.shift ? d.shift.start_time + '〜' + (d.shift.end_time <= d.shift.start_time ? '翌' : '') + d.shift.end_time : '' %></td><% } %>
+      <% if (multiStore) { %><td class="small nowrap"><%= storeLabel(d) %></td><% } %>
       <td class="num"><%= t.fmtClock(d.clockIn, d.date) %></td>
       <td class="num"><% if (d.missingClockOut) { %><span class="text-warn">未打刻</span><% } else if (d.inProgress) { %><span class="muted">勤務中</span><% } else { %><%= t.fmtClock(d.clockOut, d.date) %><% } %></td>
       <td class="num"><%= d.hasRecord && !d.missingClockOut ? t.fmtMinutes(d.breakMinutes) : '' %><% if (d.autoBreakMinutes) { %><span class="auto" title="法定休憩の不足分 <%= d.autoBreakMinutes %>分を自動控除">*</span><% } %></td>

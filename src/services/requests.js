@@ -22,9 +22,10 @@ function get(id) {
     WHERE r.id = ?`).get(id));
 }
 
-function list({ userId = null, status = null, limit = 200 } = {}) {
+function list({ userId = null, status = null, storeId = null, limit = 200 } = {}) {
   const where = [];
   const args = [];
+  if (storeId) { where.push('u.store_id = ?'); args.push(storeId); }
   if (userId) { where.push('r.user_id = ?'); args.push(userId); }
   if (status) { where.push('r.status = ?'); args.push(status); }
   const sql = `
@@ -36,7 +37,10 @@ function list({ userId = null, status = null, limit = 200 } = {}) {
   return db.get().prepare(sql).all(...args).map(parse);
 }
 
-function countPending() {
+function countPending(storeId = null) {
+  if (storeId) {
+    return db.get().prepare("SELECT COUNT(*) AS c FROM requests r JOIN users u ON u.id = r.user_id WHERE r.status = 'pending' AND u.store_id = ?").get(storeId).c;
+  }
   return db.get().prepare("SELECT COUNT(*) AS c FROM requests WHERE status = 'pending'").get().c;
 }
 

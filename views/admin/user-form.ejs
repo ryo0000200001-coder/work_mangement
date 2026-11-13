@@ -13,6 +13,32 @@
       </label>
     </div>
     <div class="form-row">
+      <label>雇用形態
+        <select name="employment_type">
+          <option value="part" <%= values.employment_type === 'part' ? 'selected' : '' %>>パート・アルバイト（シフト制）</option>
+          <option value="full" <%= values.employment_type !== 'part' ? 'selected' : '' %>>正社員（固定勤務）</option>
+        </select>
+      </label>
+      <label>所属店舗
+        <select name="store_id">
+          <option value="">（未設定）</option>
+          <% for (const so of stores) { %><option value="<%= so.id %>" <%= Number(values.store_id) === so.id ? 'selected' : '' %>><%= so.name %><%= so.active ? '' : '（無効）' %></option><% } %>
+        </select>
+      </label>
+    </div>
+    <div class="form-row">
+      <label>時給（円）
+        <input name="hourly_wage" value="<%= values.hourly_wage || '' %>" inputmode="numeric" placeholder="例: 1200">
+      </label>
+      <label>交通費（円/出勤日）
+        <input name="commute_per_day" value="<%= values.commute_per_day || '' %>" inputmode="numeric">
+      </label>
+      <label>年収の目安上限（円）
+        <input name="annual_income_limit" value="<%= values.annual_income_limit || '' %>" inputmode="numeric" placeholder="扶養内勤務の場合">
+      </label>
+    </div>
+    <p class="muted small">時給を設定すると、本人の画面に概算給与、管理画面に人件費が表示されます。シフト制の場合、遅刻・早退はシフトの時刻で判定し、1日8時間を超えた分を残業とします。</p>
+    <div class="form-row">
       <label>部署
         <input name="department" value="<%= values.department || '' %>" maxlength="100">
       </label>
@@ -21,10 +47,10 @@
       </label>
     </div>
     <div class="form-row">
-      <label>始業時刻
+      <label>基本の始業時刻
         <input type="time" name="work_start" value="<%= values.work_start %>" required>
       </label>
-      <label>終業時刻
+      <label>基本の終業時刻
         <input type="time" name="work_end" value="<%= values.work_end %>" required>
       </label>
       <label>所定労働時間（時間/日）
@@ -37,8 +63,9 @@
       </label>
       <label>権限
         <select name="role">
-          <option value="employee" <%= values.role !== 'admin' ? 'selected' : '' %>>一般</option>
-          <option value="admin" <%= values.role === 'admin' ? 'selected' : '' %>>管理者</option>
+          <option value="employee" <%= !['admin', 'manager'].includes(values.role) ? 'selected' : '' %>>一般</option>
+          <option value="manager" <%= values.role === 'manager' ? 'selected' : '' %>>店長（所属店舗を管理）</option>
+          <option value="admin" <%= values.role === 'admin' ? 'selected' : '' %>>管理者（全店舗）</option>
         </select>
       </label>
     </div>

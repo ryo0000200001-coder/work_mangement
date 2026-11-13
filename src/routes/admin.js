@@ -12,10 +12,12 @@ const { parseAttendanceForm, recordToForm, str } = require('../lib/forms');
 const att = require('../services/attendance');
 const reqs = require('../services/requests');
 const users = require('../services/users');
-const { requireLogin, requireAdmin } = require('../middleware/auth');
+const storesSvc = require('../services/stores');
+const { requireLogin, requireAdmin, requireManager, canManage, scopeStoreId } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(requireLogin, requireAdmin);
+// 管理画面は管理者・店長が利用可能。店長は担当店舗のスタッフのみ。管理者専用の画面は requireAdmin を付ける
+router.use(requireLogin, requireManager);
 
 const STATE_LABELS = { off: '未出勤', working: '勤務中', break: '休憩中', done: '退勤済' };
 
@@ -25,7 +27,7 @@ function monthParam(req) {
 
 function userOr404(req, res, id) {
   const u = users.findById(Number(id));
-  if (!u) {
+  if (!u || !canManage(req.user, u)) {
     res.status(404).render('error', { title: '見つかりません', message: '指定された従業員は存在しません。' });
     return null;
   }
@@ -36,7 +38,7 @@ function userOr404(req, res, id) {
 router.get('/', (req, res) => {
   const now = new Date();
   const today = t.today(now);
-  const rows = users.list({ includeInactive: false }).map((u) => {
+  const rows = users.list({ includeInactive: false, storeId: scopeStoreId(req.user) }).map((u) => {
     const status = att.getStatus(u.id, now);
     const date = status.record ? status.record.work_date : today;
     const day = att.buildPeriod(u, date, date, now, req.settings).days[0];
@@ -48,19 +50,24 @@ router.get('/', (req, res) => {
     else counts[r.status.state] += 1;
   }
   const dt = att.dayType(today, req.settings, att.companyHolidays(today, today));
-  res.render('admin/index', { title: '本日の勤務状況', rows, counts, STATE_LABELS, today, dayInfo: dt, pending: reqs.list({ status: 'pending', limit: 10 }) });
+  res.render('admin/index', { title: '本日の勤務状況', rows, counts, STATE_LABELS, today, dayInfo: dt, pending: reqs.list({ status: 'pending', storeId: scopeStoreId(req.user), limit: 10 }) });
 });
 
 // ---- 申請の承認 ----
 router.get('/requests', (req, res) => {
   const status = ['pending', 'approved', 'rejected', 'cancelled'].includes(req.query.status) ? req.query.status : (req.query.status === 'all' ? null : 'pending');
-  res.render('admin/requests', { title: '申請の承認', requests: reqs.list({ status, limit: 300 }), filter: req.query.status === 'all' ? 'all' : status });
+  res.render('admin/requests', { title: '申請の承認', requests: reqs.list({ status, storeId: scopeStoreId(req.user), limit: 300 }), filter: req.query.status === 'all' ? 'all' : status });
 });
 
 function reviewAction(fn, action, okMsg) {
   return (req, res) => {
     const id = Number(req.params.id);
     const comment = str(req.body.comment).slice(0, 500);
+    const target = reqs.get(id);
+    if (!target || !canManage(req.user, users.findById(target.user_id))) {
+      req.flash('error', '申請が見つかりません。');
+      return res.redirect('/admin/requests');
+    }
     try {
       fn(req.user.id, id, comment);
       audit.log(req, action, 'request', id, comment ? { comment } : null);
@@ -78,23 +85,27 @@ router.post('/requests/:id/reject', reviewAction(reqs.reject, 'request.reject', 
 router.post('/requests/:id/revoke', reviewAction(reqs.revokeLeave, 'request.revoke', '承認済みの休暇を取り消しました。'));
 
 // ---- 従業員管理 ----
-router.get('/users', (req, res) => {
+router.get('/users', requireAdmin, (req, res) => {
   const list = users.list().map((u) => ({ ...u, balance: att.paidLeaveBalance(u.id) }));
   res.render('admin/users', { title: '従業員', users: list });
 });
 
 function blankUser(settings) {
-  return { login_id: '', name: '', email: '', department: '', role: 'employee', active: 1, work_start: settings.default_work_start, work_end: settings.default_work_end, standard_hours: '', hire_date: '' };
+  return {
+    login_id: '', name: '', email: '', department: '', role: 'employee', active: 1, work_start: settings.default_work_start,
+    work_end: settings.default_work_end, standard_hours: '', hire_date: '', employment_type: 'part', store_id: '',
+    hourly_wage: '', commute_per_day: '', annual_income_limit: '',
+  };
 }
 
-router.get('/users/new', (req, res) => {
-  res.render('admin/user-form', { title: '従業員の登録', values: blankUser(req.settings), errors: [], isNew: true, target: null });
+router.get('/users/new', requireAdmin, (req, res) => {
+  res.render('admin/user-form', { stores: storesSvc.list({ includeInactive: true }), title: '従業員の登録', values: blankUser(req.settings), errors: [], isNew: true, target: null });
 });
 
-router.post('/users', (req, res) => {
+router.post('/users', requireAdmin, (req, res) => {
   const { errors, values } = users.parseUserForm(req.body, { isNew: true });
   if (!errors.length && users.findByLoginId(values.login_id)) errors.push('このログインIDはすでに使われています。');
-  if (errors.length) return res.status(400).render('admin/user-form', { title: '従業員の登録', values: req.body, errors, isNew: true, target: null });
+  if (errors.length) return res.status(400).render('admin/user-form', { stores: storesSvc.list({ includeInactive: true }), title: '従業員の登録', values: req.body, errors, isNew: true, target: null });
   const id = users.create(values, { mustChangePassword: true });
   audit.log(req, 'user.create', 'user', id, { login_id: values.login_id, name: values.name, role: values.role });
   req.flash('success', `${values.name} さんを登録しました。初期パスワードを本人に伝えてください（初回ログイン時に変更が求められます）。`);
@@ -102,16 +113,20 @@ router.post('/users', (req, res) => {
 });
 
 function userToForm(u) {
-  return { ...u, standard_hours: u.standard_minutes ? String(u.standard_minutes / 60) : '' };
+  const blank = (v) => (v == null ? '' : String(v));
+  return {
+    ...u, standard_hours: u.standard_minutes ? String(u.standard_minutes / 60) : '',
+    hourly_wage: blank(u.hourly_wage), commute_per_day: blank(u.commute_per_day), annual_income_limit: blank(u.annual_income_limit),
+  };
 }
 
-router.get('/users/:id/edit', (req, res) => {
+router.get('/users/:id/edit', requireAdmin, (req, res) => {
   const u = userOr404(req, res, req.params.id);
   if (!u) return;
-  res.render('admin/user-form', { title: '従業員の編集', values: userToForm(u), errors: [], isNew: false, target: u });
+  res.render('admin/user-form', { stores: storesSvc.list({ includeInactive: true }), title: '従業員の編集', values: userToForm(u), errors: [], isNew: false, target: u });
 });
 
-router.post('/users/:id', (req, res) => {
+router.post('/users/:id', requireAdmin, (req, res) => {
   const u = userOr404(req, res, req.params.id);
   if (!u) return;
   const { errors, values } = users.parseUserForm({ ...req.body, password: '' }, { isNew: false });
@@ -120,7 +135,7 @@ router.post('/users/:id', (req, res) => {
   if (u.role === 'admin' && (values.role !== 'admin' || !values.active) && users.activeAdminCount(u.id) === 0) {
     errors.push('有効な管理者が1人もいなくなるため、変更できません。');
   }
-  if (errors.length) return res.status(400).render('admin/user-form', { title: '従業員の編集', values: { ...req.body, id: u.id }, errors, isNew: false, target: u });
+  if (errors.length) return res.status(400).render('admin/user-form', { stores: storesSvc.list({ includeInactive: true }), title: '従業員の編集', values: { ...req.body, id: u.id }, errors, isNew: false, target: u });
   users.update(u.id, values);
   audit.log(req, 'user.update', 'user', u.id, { login_id: values.login_id, role: values.role, active: values.active });
   req.flash('success', `${values.name} さんの情報を更新しました。`);
@@ -136,7 +151,7 @@ function tempPassword() {
   return pw;
 }
 
-router.post('/users/:id/reset-password', (req, res) => {
+router.post('/users/:id/reset-password', requireAdmin, (req, res) => {
   const u = userOr404(req, res, req.params.id);
   if (!u) return;
   const pw = tempPassword();
@@ -150,8 +165,9 @@ router.post('/users/:id/reset-password', (req, res) => {
 // ---- 勤務表（従業員別） ----
 router.get('/timesheets', (req, res) => {
   const month = monthParam(req);
-  const all = users.list();
-  const target = req.query.user ? users.findById(Number(req.query.user)) : null;
+  const all = users.list({ storeId: scopeStoreId(req.user) });
+  let target = req.query.user ? users.findById(Number(req.query.user)) : null;
+  if (target && !canManage(req.user, target)) target = null;
   if (!target) {
     const rows = all.filter((u) => u.active).map((u) => ({ user: u, summary: att.buildMonth(u, month, new Date(), req.settings).summary }));
     const period = t.monthPeriod(month, req.settings.closing_day);
@@ -168,7 +184,8 @@ router.get('/attendance/:userId/:date', (req, res) => {
   const date = req.params.date;
   if (!t.isValidDate(date)) return res.redirect('/admin/timesheets');
   const rec = att.getRecord(u.id, date);
-  res.render('admin/attendance-edit', { title: '勤怠の修正', target: u, date, form: recordToForm(rec, date), rec, errors: [] });
+  const form = { ...recordToForm(rec, date), store_id: rec ? rec.store_id : att.defaultStoreId(u.id, date) };
+  res.render('admin/attendance-edit', { title: '勤怠の修正', target: u, date, form, rec, errors: [], stores: storesSvc.list({ includeInactive: true }) });
 });
 
 router.post('/attendance/:userId/:date', (req, res) => {
@@ -187,8 +204,9 @@ router.post('/attendance/:userId/:date', (req, res) => {
   const { errors, data } = parseAttendanceForm(req.body, date, { requireClockOut: false });
   if (errors.length) {
     const form = { ...req.body, clock_out_next_day: req.body.clock_out_next_day === '1', breaks: [].concat(req.body.break_start || []).map((s, i) => ({ start: s, end: [].concat(req.body.break_end || [])[i] || '' })) };
-    return res.status(400).render('admin/attendance-edit', { title: '勤怠の修正', target: u, date, form, rec: before, errors });
+    return res.status(400).render('admin/attendance-edit', { title: '勤怠の修正', target: u, date, form: { ...form, store_id: Number(req.body.store_id) || null }, rec: before, errors, stores: storesSvc.list({ includeInactive: true }) });
   }
+  data.storeId = Number(req.body.store_id) || null;
   att.saveRecord(u.id, date, data);
   audit.log(req, 'attendance.edit', 'user', u.id, { date, before, after: data });
   req.flash('success', `${u.name} さんの ${date} の勤怠を保存しました。`);
@@ -196,14 +214,14 @@ router.post('/attendance/:userId/:date', (req, res) => {
 });
 
 // ---- 有給休暇 ----
-router.get('/leave', (req, res) => {
+router.get('/leave', requireAdmin, (req, res) => {
   const list = users.list({ includeInactive: false }).map((u) => ({ ...u, balance: att.paidLeaveBalance(u.id) }));
   const target = req.query.user ? users.findById(Number(req.query.user)) : null;
   const ledger = target ? db.get().prepare(`SELECT l.*, c.name AS created_by_name FROM leave_ledger l LEFT JOIN users c ON c.id = l.created_by WHERE l.user_id = ? ORDER BY l.entry_date DESC, l.id DESC`).all(target.id) : [];
   res.render('admin/leave', { title: '有給休暇の管理', users: list, target, ledger, balance: target ? att.paidLeaveBalance(target.id) : 0, today: t.today() });
 });
 
-router.post('/leave/grant', (req, res) => {
+router.post('/leave/grant', requireAdmin, (req, res) => {
   const u = userOr404(req, res, req.body.user_id);
   if (!u) return;
   const days = Number(req.body.days);
@@ -223,14 +241,14 @@ router.post('/leave/grant', (req, res) => {
 });
 
 // ---- 休日カレンダー ----
-router.get('/holidays', (req, res) => {
+router.get('/holidays', requireAdmin, (req, res) => {
   const year = /^\d{4}$/.test(req.query.year || '') ? Number(req.query.year) : new Date().getFullYear();
   const national = [...holidaysOfYear(year).entries()].sort();
   const company = db.get().prepare('SELECT date, name FROM company_holidays WHERE date LIKE ? ORDER BY date').all(`${year}-%`);
   res.render('admin/holidays', { title: '休日カレンダー', year, national, company });
 });
 
-router.post('/holidays', (req, res) => {
+router.post('/holidays', requireAdmin, (req, res) => {
   const start = str(req.body.date);
   const end = str(req.body.end_date) || start;
   const name = str(req.body.name).slice(0, 50) || '会社休日';
@@ -245,7 +263,7 @@ router.post('/holidays', (req, res) => {
   res.redirect(`/admin/holidays?year=${(t.isValidDate(start) ? start : t.today()).slice(0, 4)}`);
 });
 
-router.post('/holidays/:date/delete', (req, res) => {
+router.post('/holidays/:date/delete', requireAdmin, (req, res) => {
   const date = req.params.date;
   db.get().prepare('DELETE FROM company_holidays WHERE date = ?').run(date);
   audit.log(req, 'holiday.delete', null, null, { date });
@@ -254,11 +272,11 @@ router.post('/holidays/:date/delete', (req, res) => {
 });
 
 // ---- 設定 ----
-router.get('/settings', (req, res) => {
+router.get('/settings', requireAdmin, (req, res) => {
   res.render('admin/settings', { title: '設定', values: req.settings, errors: [] });
 });
 
-router.post('/settings', (req, res) => {
+router.post('/settings', requireAdmin, (req, res) => {
   const b = req.body;
   const errors = [];
   const hours = Number(b.standard_hours);
@@ -273,7 +291,13 @@ router.post('/settings', (req, res) => {
     closing_day: Number(b.closing_day),
     weekly_holidays: [].concat(b.weekly_holidays || []).map(Number).filter((n) => n >= 0 && n <= 6),
     auto_break: b.auto_break === '1',
+    overtime_premium: Number(b.overtime_premium),
+    night_premium: Number(b.night_premium),
+    holiday_premium: Number(b.holiday_premium),
   };
+  for (const k of ['overtime_premium', 'night_premium', 'holiday_premium']) {
+    if (!Number.isInteger(v[k]) || v[k] < 0 || v[k] > 200) errors.push('割増率は 0〜200 の整数（%）で入力してください。');
+  }
   if (!Number.isFinite(hours) || hours <= 0 || hours > 24) errors.push('所定労働時間は 0〜24 時間で入力してください。');
   if (!t.isValidTime(v.default_work_start) || !t.isValidTime(v.default_work_end)) errors.push('始業・終業時刻を HH:MM 形式で入力してください。');
   if (!roundingUnits.includes(v.rounding_in) || !roundingUnits.includes(v.rounding_out)) errors.push('丸め単位が不正です。');
@@ -288,7 +312,7 @@ router.post('/settings', (req, res) => {
 // ---- CSV 出力 ----
 const fm = (m) => t.fmtMinutes(m);
 
-router.get('/export/summary.csv', (req, res) => {
+router.get('/export/summary.csv', requireAdmin, (req, res) => {
   const month = monthParam(req);
   const header = ['社員ID', '氏名', '部署', '所定労働日数', '出勤日数', '休日出勤日数', '総労働時間', '残業時間', '深夜時間', '休日労働時間',
     '遅刻回数', '遅刻時間', '早退回数', '早退時間', '有給取得日数', '特別休暇日数', '欠勤日数', '未打刻日数', '退勤漏れ日数', '有給残日数'];
@@ -302,7 +326,7 @@ router.get('/export/summary.csv', (req, res) => {
   csv.send(res, `勤怠集計_${month}.csv`, rows);
 });
 
-router.get('/export/detail.csv', (req, res) => {
+router.get('/export/detail.csv', requireAdmin, (req, res) => {
   const month = monthParam(req);
   const target = req.query.user ? users.findById(Number(req.query.user)) : null;
   const list = target ? [target] : users.list({ includeInactive: false });
@@ -322,7 +346,7 @@ router.get('/export/detail.csv', (req, res) => {
 });
 
 // ---- 操作ログ ----
-router.get('/audit', (req, res) => {
+router.get('/audit', requireAdmin, (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const per = 100;
   const logs = db.get().prepare(`SELECT a.*, u.name AS user_name FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id ORDER BY a.id DESC LIMIT ? OFFSET ?`).all(per + 1, (page - 1) * per);

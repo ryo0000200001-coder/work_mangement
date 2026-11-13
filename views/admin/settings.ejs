@@ -53,6 +53,14 @@
     </div>
     <p class="muted small">※ 厚生労働省の通達上、日々の労働時間の切り捨ては原則認められていません。丸めを使う場合は社内規程との整合を確認してください。</p>
 
+    <h2>概算給与・人件費の割増率</h2>
+    <div class="form-row">
+      <label>時間外（%）<input type="number" name="overtime_premium" min="0" max="200" value="<%= values.overtime_premium %>" required></label>
+      <label>深夜（%）<input type="number" name="night_premium" min="0" max="200" value="<%= values.night_premium %>" required></label>
+      <label>休日（%）<input type="number" name="holiday_premium" min="0" max="200" value="<%= values.holiday_premium %>" required></label>
+    </div>
+    <p class="muted small">時給制スタッフの概算給与と人件費の計算に使います。法定の最低率は 時間外25%・深夜25%・法定休日35% です。</p>
+
     <h2>休憩</h2>
     <label class="check"><input type="checkbox" name="auto_break" value="1" <%= values.auto_break ? 'checked' : '' %>> 休憩打刻が法定休憩（6時間超45分・8時間超60分）に満たない場合、不足分を自動控除する</label>
 

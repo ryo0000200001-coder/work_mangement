@@ -16,23 +16,29 @@
     <button class="nav-toggle" type="button" aria-label="メニュー" aria-expanded="false" data-nav-toggle>☰</button>
     <nav class="nav" data-nav>
       <a href="/" class="<%= currentPath === '/' ? 'active' : '' %>">打刻</a>
+      <a href="/shifts" class="<%= currentPath === '/shifts' ? 'active' : '' %>">シフト</a>
       <a href="/timesheet" class="<%= currentPath === '/timesheet' ? 'active' : '' %>">勤務表</a>
       <a href="/requests" class="<%= currentPath.startsWith('/requests') ? 'active' : '' %>">申請</a>
-      <% if (currentUser.role === 'admin') { %>
+      <% if (['admin', 'manager'].includes(currentUser.role)) { %>
         <span class="nav-sep" aria-hidden="true"></span>
         <a href="/admin" class="<%= currentPath === '/admin' || currentPath === '/admin/' ? 'active' : '' %>">本日の状況</a>
+        <a href="/admin/shifts" class="<%= currentPath.startsWith('/admin/shifts') ? 'active' : '' %>">シフト作成</a>
         <a href="/admin/requests" class="<%= currentPath.startsWith('/admin/requests') ? 'active' : '' %>">承認<% if (pendingCount) { %><span class="badge"><%= pendingCount %></span><% } %></a>
-        <a href="/admin/timesheets" class="<%= currentPath.startsWith('/admin/timesheets') || currentPath.startsWith('/admin/attendance') ? 'active' : '' %>">集計・勤務表</a>
-        <details class="nav-more <%= /^\/admin\/(users|leave|holidays|settings|audit)/.test(currentPath) ? 'active' : '' %>">
+        <a href="/admin/timesheets" class="<%= currentPath.startsWith('/admin/timesheets') || currentPath.startsWith('/admin/attendance') ? 'active' : '' %>">集計</a>
+        <a href="/admin/labor" class="<%= currentPath.startsWith('/admin/labor') ? 'active' : '' %>">人件費</a>
+        <% if (currentUser.role === 'admin') { %>
+        <details class="nav-more <%= /^\/admin\/(users|stores|leave|holidays|settings|audit)/.test(currentPath) ? 'active' : '' %>">
           <summary>管理</summary>
           <div class="nav-menu">
             <a href="/admin/users">従業員</a>
+            <a href="/admin/stores">店舗</a>
             <a href="/admin/leave">有給休暇</a>
             <a href="/admin/holidays">休日カレンダー</a>
             <a href="/admin/settings">設定</a>
             <a href="/admin/audit">操作ログ</a>
           </div>
         </details>
+        <% } %>
       <% } %>
       <span class="nav-spacer"></span>
       <details class="nav-more nav-user">

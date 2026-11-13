@@ -33,4 +33,25 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { loadUser, requireLogin, requireAdmin };
+/** 管理者または店長 */
+function requireManager(req, res, next) {
+  if (!req.user || !['admin', 'manager'].includes(req.user.role)) {
+    res.status(403);
+    return res.render('error', { title: '権限がありません', message: 'このページは管理者・店長のみ利用できます。' });
+  }
+  next();
+}
+
+/** 店長は自店舗所属のスタッフのみ扱える。管理者は全員 */
+function canManage(actor, target) {
+  if (!actor || !target) return false;
+  if (actor.role === 'admin') return true;
+  return actor.role === 'manager' && !!actor.store_id && target.store_id === actor.store_id;
+}
+
+/** 店長の場合は担当店舗ID、管理者は null（全店舗） */
+function scopeStoreId(actor) {
+  return actor && actor.role === 'manager' ? actor.store_id : null;
+}
+
+module.exports = { loadUser, requireLogin, requireAdmin, requireManager, canManage, scopeStoreId };

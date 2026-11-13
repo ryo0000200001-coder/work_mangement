@@ -14,6 +14,7 @@ const { csrf } = require('./middleware/security');
 const { loadUser } = require('./middleware/auth');
 const requestsSvc = require('./services/requests');
 const usersSvc = require('./services/users');
+const storesSvc = require('./services/stores');
 
 function createApp({ sessionSecret = config.loadSessionSecret() } = {}) {
   const app = express();
@@ -85,7 +86,10 @@ function createApp({ sessionSecret = config.loadSessionSecret() } = {}) {
       TYPE_LABELS: requestsSvc.TYPE_LABELS,
       appName: settings.company_name ? `${settings.company_name} 勤怠管理` : '勤怠管理',
       currentPath: req.path,
-      pendingCount: req.user && req.user.role === 'admin' ? requestsSvc.countPending() : 0,
+      storeNames: req.user ? storesSvc.nameMap() : new Map(),
+      pendingCount: !req.user ? 0
+        : req.user.role === 'admin' ? requestsSvc.countPending()
+          : req.user.role === 'manager' ? requestsSvc.countPending(req.user.store_id) : 0,
       title: '',
     });
     next();
@@ -99,6 +103,7 @@ function createApp({ sessionSecret = config.loadSessionSecret() } = {}) {
 
   app.use(require('./routes/auth'));
   app.use(require('./routes/employee'));
+  app.use('/admin', require('./routes/store-admin'));
   app.use('/admin', require('./routes/admin'));
 
   app.use((req, res) => {

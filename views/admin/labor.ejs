@@ -1,0 +1,68 @@
+<%- include('../partials/header') %>
+<%
+  const today = t.today();
+  const pct = (v) => (v == null ? '' : v.toFixed(1) + '%');
+%>
+<div class="page-head">
+  <div>
+    <h1>人件費・売上 <span class="muted">— <%= store.name %></span></h1>
+    <p class="muted small"><%= month.replace('-', '年') %>月度（<%= period.start %> 〜 <%= period.end %>）</p>
+  </div>
+  <div class="toolbar">
+    <% if (stores.length > 1) { %>
+      <form method="get" action="/admin/labor" class="inline-form" data-autosubmit>
+        <input type="hidden" name="month" value="<%= month %>">
+        <select name="store" aria-label="店舗"><% for (const so of stores) { %><option value="<%= so.id %>" <%= so.id === store.id ? 'selected' : '' %>><%= so.name %></option><% } %></select>
+      </form>
+    <% } %>
+    <nav class="month-nav">
+      <a class="btn btn-sm" href="/admin/labor?store=<%= store.id %>&month=<%= t.shiftMonth(month, -1) %>">← 前月</a>
+      <form method="get" action="/admin/labor" class="inline-form" data-autosubmit>
+        <input type="hidden" name="store" value="<%= store.id %>">
+        <input type="month" name="month" value="<%= month %>" aria-label="対象月">
+      </form>
+      <a class="btn btn-sm" href="/admin/labor?store=<%= store.id %>&month=<%= t.shiftMonth(month, 1) %>">翌月 →</a>
+    </nav>
+  </div>
+</div>
+
+<section class="stats stats-wide">
+  <div class="stat"><span class="stat-label">売上（入力分）</span><span class="stat-value"><%= total.sales.toLocaleString('ja-JP') %><small>円</small></span></div>
+  <div class="stat"><span class="stat-label">人件費（実績・概算）</span><span class="stat-value"><%= total.actual.toLocaleString('ja-JP') %><small>円</small></span></div>
+  <div class="stat <%= total.ratio != null && total.ratio > 30 ? 'stat-warn' : '' %>"><span class="stat-label">人件費率</span><span class="stat-value"><%= total.ratio == null ? '—' : total.ratio.toFixed(1) %><small><%= total.ratio == null ? '' : '%' %></small></span></div>
+  <div class="stat"><span class="stat-label">総労働時間（実績）</span><span class="stat-value"><%= t.fmtMinutes(total.actualMinutes) %></span></div>
+  <div class="stat"><span class="stat-label">人件費（シフト予定）</span><span class="stat-value"><%= total.planned.toLocaleString('ja-JP') %><small>円</small></span></div>
+</section>
+
+<form method="post" action="/admin/labor/sales">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <input type="hidden" name="store_id" value="<%= store.id %>">
+  <input type="hidden" name="month" value="<%= month %>">
+  <div class="table-wrap">
+    <table class="list labor-table">
+      <thead><tr><th>日付</th><th class="num">売上（円）</th><th class="num">予定人件費</th><th class="num">実績人件費</th><th class="num">人件費率</th><th class="num">労働時間</th><th class="num">人数</th></tr></thead>
+      <tbody>
+      <% for (const r of rows) { const w = t.weekday(r.date); %>
+        <tr class="<%= r.date === today ? 'today' : '' %>">
+          <td class="nowrap <%= w === 0 ? 'text-sun' : w === 6 ? 'text-sat' : '' %>"><%= r.date.slice(5).replace('-', '/') %>（<%= t.weekdayLabel(r.date) %>）</td>
+          <td class="num">
+            <input type="hidden" name="date" value="<%= r.date %>">
+            <input name="amount" value="<%= r.sales == null ? '' : r.sales %>" inputmode="numeric" class="input-num" aria-label="<%= r.date %> の売上">
+          </td>
+          <td class="num muted"><%= r.planned ? r.planned.toLocaleString('ja-JP') : '' %></td>
+          <td class="num strong"><%= r.actual ? r.actual.toLocaleString('ja-JP') : '' %></td>
+          <td class="num <%= r.ratio != null && r.ratio > 30 ? 'text-warn strong' : '' %>"><%= pct(r.ratio) %></td>
+          <td class="num"><%= t.fmtMinutes(r.actualMinutes, { blankZero: true }) %></td>
+          <td class="num"><%= r.staff || '' %></td>
+        </tr>
+      <% } %>
+      </tbody>
+    </table>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">売上を保存</button></div>
+</form>
+<p class="muted small">
+  実績人件費は打刻にもとづく概算（時給×労働時間＋時間外・深夜・休日の割増＋交通費）です。ヘルプ勤務は実際に働いた店舗に按分して計上します。人件費率は売上を入力した日のみで計算し、30%を超える日を赤字で表示します。
+  <% if (unpricedMinutes) { %><br>時給が未設定のスタッフの勤務 <%= t.fmtMinutes(unpricedMinutes) %> は人件費に含まれていません。<% } %>
+</p>
+<%- include('../partials/footer') %>

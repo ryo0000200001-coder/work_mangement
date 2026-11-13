@@ -11,6 +11,9 @@ const DEFAULTS = {
   closing_day: 0,              // 締め日（0 = 月末）
   weekly_holidays: [0, 6],     // 週休日（0=日 ... 6=土）
   auto_break: true,            // 休憩不足時に法定休憩を自動控除
+  overtime_premium: 25,        // 時間外割増率（%）
+  night_premium: 25,           // 深夜割増率（%）
+  holiday_premium: 35,         // 休日労働の割増率（%）
 };
 
 function serialize(key, value) {

@@ -5,6 +5,17 @@
   <%- include('../partials/errors') %>
   <form method="post" action="/admin/attendance/<%= target.id %>/<%= date %>" class="form">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <% if (stores.length) { %>
+      <label>出勤店舗
+        <select name="store_id">
+          <option value="">（未設定）</option>
+          <% for (const so of stores) { %><option value="<%= so.id %>" <%= Number(form.store_id) === so.id ? 'selected' : '' %>><%= so.name %></option><% } %>
+        </select>
+      </label>
+      <% if (rec && rec.moves && rec.moves.length) { %>
+        <p class="small muted">店舗移動: <%= rec.moves.map((m) => t.fmtClock(m.at, date) + ' → ' + (storeNames.get(m.store_id) || '')).join('、') %></p>
+      <% } %>
+    <% } %>
     <%- include('../partials/attendance-fields', { form }) %>
     <p class="muted small">変更内容は操作ログに記録されます。退勤時刻を空欄にすると「勤務中」扱いになります。</p>
     <div class="form-actions">

@@ -102,9 +102,11 @@ function nightOverlap(a, b) {
  * @param {string|null} p.leaveType LEAVE_TYPES のキー
  * @param {object} p.schedule {start:'HH:MM', end:'HH:MM', standardMinutes}
  * @param {object} p.settings {rounding_in, rounding_out, auto_break}
+ * @param {boolean} [p.scheduled] 出勤予定日か（省略時は !isOffDay）。シフト制ではシフトがある日のみ true
  */
 function computeDay(p) {
   const { date, record, now, isOffDay, offReason, leaveType, schedule, settings } = p;
+  const scheduled = p.scheduled == null ? !isOffDay : !!p.scheduled;
   const leave = leaveType ? LEAVE_TYPES[leaveType] || null : null;
   const today = t.ymd(now);
   const r = {
@@ -131,12 +133,13 @@ function computeDay(p) {
     holidayWorkMinutes: 0,
     lateMinutes: 0,
     earlyLeaveMinutes: 0,
-    isWorkday: !isOffDay,
+    isWorkday: scheduled,
+    storeMinutes: {},
   };
 
   if (!r.hasRecord) {
     // 過去の出勤日で記録も休暇もない → 未打刻
-    if (!isOffDay && !leave && date < today) r.noRecord = true;
+    if (scheduled && !leave && date < today) r.noRecord = true;
     return r;
   }
 
@@ -188,6 +191,8 @@ function computeDay(p) {
     Math.round(segments.reduce((s, [x, y]) => s + nightOverlap(x, y), 0))
   );
 
+  r.storeMinutes = allocateStores(record, segments, r.workMinutes);
+
   if (isOffDay) {
     r.holidayWorkMinutes = r.workMinutes;
   } else {
@@ -208,6 +213,43 @@ function computeDay(p) {
     }
   }
   return r;
+}
+
+/**
+ * 店舗別の勤務時間（分）。出勤店舗と店舗移動の時刻で区切り、労働区間との重なりで按分する。
+ * 自動控除した休憩分は比率で差し引き、合計が workMinutes と一致するよう調整する。
+ */
+function allocateStores(record, segments, workMinutes) {
+  const out = {};
+  if (!workMinutes) return out;
+  const startStore = record.store_id || 0;
+  const moves = (record.moves || [])
+    .map((m) => ({ store: m.store_id || 0, at: t.parseDateTime(m.at).getTime() }))
+    .sort((x, y) => x.at - y.at);
+  const bounds = [{ store: startStore, from: -Infinity }];
+  for (const m of moves) bounds.push({ store: m.store, from: m.at });
+  const raw = {};
+  let total = 0;
+  bounds.forEach((bnd, i) => {
+    const to = i + 1 < bounds.length ? bounds[i + 1].from : Infinity;
+    for (const [x, y] of segments) {
+      const lo = Math.max(x, bnd.from);
+      const hi = Math.min(y, to);
+      if (hi > lo) {
+        raw[bnd.store] = (raw[bnd.store] || 0) + (hi - lo) / 60000;
+        total += (hi - lo) / 60000;
+      }
+    }
+  });
+  if (!total) return out;
+  let assigned = 0;
+  const keys = Object.keys(raw);
+  keys.forEach((k, i) => {
+    const v = i === keys.length - 1 ? workMinutes - assigned : Math.round((raw[k] / total) * workMinutes);
+    out[k] = v;
+    assigned += v;
+  });
+  return out;
 }
 
 /** 月次集計 */
@@ -244,5 +286,5 @@ function summarize(days) {
 
 module.exports = {
   LEAVE_TYPES, requiredBreak, autoBreakDeduction, computeDay, summarize,
-  roundUp, roundDown, mergeIntervals, subtract, nightOverlap,
+  roundUp, roundDown, mergeIntervals, subtract, nightOverlap, allocateStores,
 };

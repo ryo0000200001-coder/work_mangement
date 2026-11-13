@@ -33,6 +33,16 @@ const ACTION_LABELS = {
   'holiday.add': '会社休日追加',
   'holiday.delete': '会社休日削除',
   'settings.update': '設定変更',
+  'punch.move': '店舗移動（ヘルプ）',
+  'shift.request': '希望シフト提出',
+  'shift.save': 'シフト保存',
+  'shift.delete': 'シフト削除',
+  'shift.autofill': 'シフト一括作成（希望から）',
+  'shift.copy': 'シフトコピー',
+  'shift.publish': 'シフト公開',
+  'sales.save': '売上入力',
+  'store.create': '店舗登録',
+  'store.update': '店舗更新',
 };
 
 module.exports = { log, ACTION_LABELS };

@@ -1,0 +1,61 @@
+<%- include('partials/header') %>
+<%
+  const fmtShift = (x) => `${x.start_time}〜${x.end_time <= x.start_time ? '翌' : ''}${x.end_time}`;
+  const today = t.today();
+%>
+<div class="page-head">
+  <div>
+    <h1>シフト</h1>
+    <p class="muted small">確定したシフトの確認と、希望シフトの提出ができます。確定済みの日は変更できません。</p>
+  </div>
+  <nav class="month-nav">
+    <% if (start > today) { %><a class="btn btn-sm" href="/shifts?start=<%= t.addDays(start, -28) < today ? today : t.addDays(start, -28) %>">← 前の4週間</a><% } %>
+    <a class="btn btn-sm" href="/shifts?start=<%= t.addDays(start, 28) %>">次の4週間 →</a>
+  </nav>
+</div>
+
+<form method="post" action="/shifts/requests" class="shift-request-form">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <input type="hidden" name="start" value="<%= start %>">
+  <div class="table-wrap">
+    <table class="list shift-req-table">
+      <thead><tr><th>日付</th><th>確定シフト</th><th>希望</th><th>時間帯（任意）</th><th class="col-note">メモ</th></tr></thead>
+      <tbody>
+      <% for (const d of dates) {
+           const sh = shiftMap.get(d); const rq = reqMap.get(d) || {}; const w = t.weekday(d);
+           const locked = !!sh; %>
+        <tr class="<%= w === 0 ? 'sun' : w === 6 ? 'sat' : '' %> <%= locked ? 'locked' : '' %>">
+          <td class="nowrap day-cell"><%= d.slice(5).replace('-', '/') %>（<%= t.weekdayLabel(d) %>）</td>
+          <td class="nowrap">
+            <% if (sh) { %><strong><%= fmtShift(sh) %></strong> <span class="muted small"><%= sh.store_name || '' %><%= sh.break_minutes ? ' 休憩' + sh.break_minutes + '分' : '' %></span><% } else { %><span class="muted">—</span><% } %>
+          </td>
+          <td>
+            <input type="hidden" name="date" value="<%= d %>">
+            <select name="kind" aria-label="<%= d %> の希望" <%= locked ? 'disabled' : '' %> data-kind>
+              <option value="" <%= !rq.kind ? 'selected' : '' %>>未入力</option>
+              <option value="available" <%= rq.kind === 'available' ? 'selected' : '' %>>◯ 出勤できる</option>
+              <option value="unavailable" <%= rq.kind === 'unavailable' ? 'selected' : '' %>>✕ 休み希望</option>
+            </select>
+            <% if (locked) { %><input type="hidden" name="kind" value="<%= rq.kind || '' %>"><% } %>
+          </td>
+          <td class="nowrap time-range">
+            <input type="time" name="start_time" value="<%= rq.start_time || '' %>" aria-label="開始" <%= locked ? 'disabled' : '' %>>
+            <span class="tilde">〜</span>
+            <input type="time" name="end_time" value="<%= rq.end_time || '' %>" aria-label="終了" <%= locked ? 'disabled' : '' %>>
+            <% if (locked) { %><input type="hidden" name="start_time" value=""><input type="hidden" name="end_time" value=""><% } %>
+          </td>
+          <td class="col-note">
+            <input name="note" value="<%= rq.note || '' %>" maxlength="100" aria-label="メモ" placeholder="メモ（任意）" <%= locked ? 'disabled' : '' %>>
+            <% if (locked) { %><input type="hidden" name="note" value=""><% } %>
+          </td>
+        </tr>
+      <% } %>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">「出勤できる」で時間帯を空欄にすると終日OKとして扱われます。終了が開始より前の時刻なら翌日までの意味になります。</p>
+  <div class="form-actions sticky-actions">
+    <button class="btn btn-primary" type="submit">希望シフトを提出</button>
+  </div>
+</form>
+<%- include('partials/footer') %>

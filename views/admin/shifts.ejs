@@ -1,0 +1,154 @@
+<%- include('../partials/header') %>
+<%
+  const fmtT = (s, e) => `${s}〜${e <= s ? '翌' : ''}${e}`;
+  const q = (extra) => `/admin/shifts?store=${store.id}&days=${days}&start=${extra}`;
+  const today = t.today();
+%>
+<div class="page-head">
+  <div>
+    <h1>シフト表 <span class="muted">— <%= store.name %></span></h1>
+    <p class="muted small"><%= start %>（<%= t.weekdayLabel(start) %>）〜 <%= end %>（<%= t.weekdayLabel(end) %>）
+      ／ 予定人件費 <strong><%= pay.yen(totalCost) %></strong>
+      <% if (unpublished) { %> ／ <span class="text-warn">未公開 <%= unpublished %>件</span><% } %></p>
+  </div>
+  <div class="toolbar">
+    <% if (stores.length > 1) { %>
+      <form method="get" action="/admin/shifts" class="inline-form" data-autosubmit>
+        <input type="hidden" name="start" value="<%= start %>"><input type="hidden" name="days" value="<%= days %>">
+        <select name="store" aria-label="店舗"><% for (const so of stores) { %><option value="<%= so.id %>" <%= so.id === store.id ? 'selected' : '' %>><%= so.name %></option><% } %></select>
+      </form>
+    <% } %>
+    <nav class="month-nav">
+      <a class="btn btn-sm" href="<%= q(t.addDays(start, -days)) %>">← 前へ</a>
+      <a class="btn btn-sm" href="<%= q(t.addDays(today, t.weekday(today) === 0 ? -6 : 1 - t.weekday(today))) %>">今週</a>
+      <a class="btn btn-sm" href="<%= q(t.addDays(start, days)) %>">次へ →</a>
+      <a class="btn btn-sm" href="/admin/shifts?store=<%= store.id %>&start=<%= start %>&days=<%= days === 7 ? 14 : 7 %>"><%= days === 7 ? '2週間表示' : '1週間表示' %></a>
+    </nav>
+  </div>
+</div>
+
+<div class="shift-actions">
+  <% for (const [action, label, confirm, cls] of [
+       ['autofill', '希望から下書きを作成', '提出済みの希望シフト（◯）から、未作成の日の下書きを作成します。', ''],
+       ['copy', '前の期間をコピー', '前の' + days + '日間のシフトを、この期間の空いている日にコピーします。', ''],
+       ['publish', '公開する' + (unpublished ? '（' + unpublished + '件）' : ''), 'この期間の下書きシフトを公開し、スタッフに表示します。', 'btn-primary'],
+     ]) { %>
+    <form method="post" action="/admin/shifts/<%= action %>" class="inline-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="store_id" value="<%= store.id %>"><input type="hidden" name="start" value="<%= start %>"><input type="hidden" name="days" value="<%= days %>">
+      <button class="btn btn-sm <%= cls %>" data-confirm="<%= confirm %>" <%= action === 'publish' && !unpublished ? 'disabled' : '' %>><%= label %></button>
+    </form>
+  <% } %>
+  <span class="legend small muted">
+    <span class="lg lg-pub"></span>公開済 <span class="lg lg-draft"></span>下書き <span class="lg lg-ok"></span>出勤希望 <span class="lg lg-ng"></span>休み希望
+  </span>
+</div>
+
+<div class="table-wrap">
+<table class="shift-grid">
+  <thead>
+    <tr>
+      <th class="sg-name">スタッフ</th>
+      <% for (const d of dates) { const w = t.weekday(d); const f = footer.find((x) => x.date === d); %>
+        <th class="<%= w === 0 || f.holiday ? 'sun' : w === 6 ? 'sat' : '' %> <%= d === today ? 'today' : '' %>"><%= d.slice(5).replace('-', '/') %><br><span class="small">（<%= t.weekdayLabel(d) %>）</span><% if (f.holiday) { %><br><span class="tiny"><%= f.holiday %></span><% } %></th>
+      <% } %>
+      <th class="num">合計</th>
+    </tr>
+  </thead>
+  <tbody>
+  <% for (const u of staff) { let mins = 0; %>
+    <tr>
+      <th class="sg-name" scope="row">
+        <%= u.name %>
+        <span class="tiny muted"><%= u.employment_type === 'part' ? 'パート' : '社員' %><%= u.hourly_wage ? ' ¥' + u.hourly_wage.toLocaleString('ja-JP') : '' %><%= ownIds.has(u.id) ? '' : ' ヘルプ' %></span>
+      </th>
+      <% for (const d of dates) {
+           const sh = shiftMap.get(u.id + '|' + d); const rq = reqMap.get(u.id + '|' + d); const lv = leaveMap.get(u.id + '|' + d);
+           const otherStore = sh && sh.store_id && sh.store_id !== store.id;
+           if (sh && !otherStore) mins += pay.shiftMinutes(sh);
+           const cls = sh ? (otherStore ? 'other' : sh.published ? 'pub' : 'draft') : rq ? (rq.kind === 'available' ? 'ok' : 'ng') : '';
+      %>
+        <td class="sg-cell <%= cls %>">
+          <button type="button" class="sg-btn" data-shift-edit
+            data-user="<%= u.id %>" data-name="<%= u.name %>" data-date="<%= d %>"
+            data-start="<%= sh ? sh.start_time : (rq && rq.start_time) || u.work_start %>"
+            data-end="<%= sh ? sh.end_time : (rq && rq.end_time) || u.work_end %>"
+            data-break="<%= sh ? sh.break_minutes : '' %>" data-note="<%= sh ? sh.note || '' : '' %>"
+            data-exists="<%= sh && !otherStore ? '1' : '' %>"
+            data-request="<%= rq ? (rq.kind === 'available' ? '◯ ' + (rq.start_time ? fmtT(rq.start_time, rq.end_time) : '終日OK') : '✕ 休み希望') + (rq.note ? '（' + rq.note + '）' : '') : '未提出' %>"
+            <%= otherStore || lv ? 'disabled' : '' %>>
+            <% if (lv) { %><span class="sg-leave"><%= LEAVE_TYPES[lv] ? LEAVE_TYPES[lv].short : '休暇' %></span>
+            <% } else if (sh) { %>
+              <span class="sg-time"><%= sh.start_time %></span><span class="sg-time">〜<%= sh.end_time %></span>
+              <% if (otherStore) { %><span class="tiny"><%= sh.store_name %></span><% } %>
+            <% } else if (rq) { %>
+              <span class="sg-req"><%= rq.kind === 'available' ? '◯' : '✕' %></span>
+              <% if (rq.kind === 'available' && rq.start_time) { %><span class="tiny"><%= rq.start_time %>-<%= rq.end_time %></span><% } %>
+            <% } else { %><span class="sg-empty">＋</span><% } %>
+          </button>
+        </td>
+      <% } %>
+      <td class="num small"><%= t.fmtMinutes(mins, { blankZero: true }) %></td>
+    </tr>
+  <% } %>
+  <% if (!staff.length) { %><tr><td colspan="<%= dates.length + 2 %>" class="muted">この店舗に所属するスタッフがいません。従業員の編集画面で所属店舗を設定してください。</td></tr><% } %>
+  </tbody>
+  <tfoot>
+    <tr>
+      <th class="sg-name">人数 / 必要</th>
+      <% for (const f of footer) { const short = f.required && f.count < f.required; %>
+        <td class="num <%= short ? 'text-warn strong' : '' %>"><%= f.count %><% if (f.required) { %> / <%= f.required %><% } %></td>
+      <% } %>
+      <td></td>
+    </tr>
+    <tr>
+      <th class="sg-name">予定人件費</th>
+      <% for (const f of footer) { %><td class="num small"><%= f.cost ? f.cost.toLocaleString('ja-JP') : '' %></td><% } %>
+      <td class="num small strong"><%= totalCost.toLocaleString('ja-JP') %></td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+
+<% if (others.length) { %>
+<section class="card">
+  <h2>ヘルプ（他店舗スタッフ）を追加</h2>
+  <form method="post" action="/admin/shifts/save" class="form-row">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input type="hidden" name="store_id" value="<%= store.id %>"><input type="hidden" name="start" value="<%= start %>"><input type="hidden" name="days" value="<%= days %>">
+    <label>スタッフ<select name="user_id" required><% for (const u of others) { %><option value="<%= u.id %>"><%= u.name %>（<%= storeNames.get(u.store_id) || '店舗未設定' %>）</option><% } %></select></label>
+    <label>日付<input type="date" name="date" value="<%= start %>" min="<%= start %>" max="<%= end %>" required></label>
+    <label>開始<input type="time" name="start_time" required></label>
+    <label>終了<input type="time" name="end_time" required></label>
+    <label>休憩（分）<input type="number" name="break_minutes" min="0" step="5" placeholder="自動"></label>
+    <button class="btn" type="submit">追加</button>
+  </form>
+</section>
+<% } %>
+
+<dialog class="dialog" data-shift-dialog>
+  <form method="post" action="/admin/shifts/save" class="form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input type="hidden" name="store_id" value="<%= store.id %>"><input type="hidden" name="start" value="<%= start %>"><input type="hidden" name="days" value="<%= days %>">
+    <input type="hidden" name="user_id" data-f="user">
+    <input type="hidden" name="date" data-f="date">
+    <h2 data-f="title">シフト</h2>
+    <p class="small muted">希望: <span data-f="request"></span></p>
+    <div class="form-row">
+      <label>開始<input type="time" name="start_time" data-f="start" required></label>
+      <label>終了<input type="time" name="end_time" data-f="end" required></label>
+    </div>
+    <div class="form-row">
+      <label>休憩（分）<input type="number" name="break_minutes" data-f="break" min="0" step="5" placeholder="空欄で法定休憩を自動設定"></label>
+      <label>メモ<input name="note" data-f="note" maxlength="100"></label>
+    </div>
+    <p class="muted small">終了が開始より前の時刻なら翌日終了として扱います。</p>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-danger" name="delete" value="1" formnovalidate data-f="delete" data-confirm="このシフトを削除しますか？">削除</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-dialog-close>キャンセル</button>
+      <button type="submit" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+<%- include('../partials/footer') %>

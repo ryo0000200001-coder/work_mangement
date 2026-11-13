@@ -3,31 +3,55 @@
   const st = status.state;
   const stateLabel = { off: '未出勤', working: '勤務中', break: '休憩中', done: '退勤済み' }[st];
   const s = sheet.summary;
+  const today = t.today(now);
+  const todayShift = upcoming.find((x) => x.work_date === today);
+  const fmtShift = (x) => `${x.start_time}〜${x.end_time <= x.start_time ? '翌' : ''}${x.end_time}`;
 %>
 <div class="grid-dash">
   <section class="card punch-card">
     <div class="clock">
-      <div class="clock-date" data-clock-date><%= t.today(now) %>（<%= t.weekdayLabel(t.today(now)) %>）</div>
+      <div class="clock-date" data-clock-date><%= today %>（<%= t.weekdayLabel(today) %>）</div>
       <div class="clock-time" data-clock-time><%= t.toLocalISO(now).slice(11, 19) %></div>
     </div>
     <div class="state state-<%= st %>"><span class="dot"></span><%= stateLabel %>
+      <% if (currentStoreId && storeNames.get(currentStoreId)) { %><span class="tag tag-store"><%= storeNames.get(currentStoreId) %></span><% } %>
       <% if (todayRow.leaveLabel) { %><span class="tag tag-leave"><%= todayRow.leaveLabel %></span><% } %>
       <% if (todayRow.isOffDay) { %><span class="tag tag-off"><%= todayRow.offReason || '休日' %></span><% } %>
     </div>
+    <% if (todayShift) { %>
+      <p class="today-shift">本日のシフト <strong><%= fmtShift(todayShift) %></strong><%= todayShift.store_name ? '（' + todayShift.store_name + '）' : '' %></p>
+    <% } %>
     <form method="post" action="/punch" class="punch-buttons" data-once>
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <% if (st === 'off' && stores.length > 1) { %>
+        <label class="store-select">出勤する店舗
+          <select name="store_id">
+            <% for (const so of stores) { %><option value="<%= so.id %>" <%= so.id === defaultStoreId ? 'selected' : '' %>><%= so.name %></option><% } %>
+          </select>
+        </label>
+      <% } %>
       <button name="action" value="clock_in" class="punch punch-in" <%= st === 'off' ? '' : 'disabled' %>>出勤</button>
       <button name="action" value="clock_out" class="punch punch-out" <%= st === 'working' || st === 'break' ? '' : 'disabled' %> data-confirm="退勤を記録します。よろしいですか？">退勤</button>
       <button name="action" value="break_start" class="punch punch-break" <%= st === 'working' ? '' : 'disabled' %>>休憩開始</button>
       <button name="action" value="break_end" class="punch punch-break" <%= st === 'break' ? '' : 'disabled' %>>休憩終了</button>
     </form>
+    <% if (st === 'working' && stores.length > 1) { %>
+      <form method="post" action="/punch" class="move-form" data-once>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="action" value="move">
+        <select name="store_id" aria-label="移動先の店舗">
+          <% for (const so of stores) { if (so.id === currentStoreId) continue; %><option value="<%= so.id %>"><%= so.name %></option><% } %>
+        </select>
+        <button class="btn btn-sm" data-confirm="選択した店舗へ移動（ヘルプ）します。以降の勤務は移動先の店舗で記録されます。">店舗を移動（ヘルプ）</button>
+      </form>
+    <% } %>
     <dl class="today-stats">
       <div><dt>出勤</dt><dd><%= t.fmtClock(todayRow.clockIn, todayRow.date) || '--:--' %></dd></div>
       <div><dt>退勤</dt><dd><%= t.fmtClock(todayRow.clockOut, todayRow.date) || '--:--' %></dd></div>
       <div><dt>休憩</dt><dd><%= todayRow.hasRecord ? t.fmtMinutes(todayRow.breakMinutes) : '-' %></dd></div>
       <div><dt>勤務時間</dt><dd><%= todayRow.hasRecord ? t.fmtMinutes(todayRow.workMinutes) : '-' %></dd></div>
     </dl>
-    <% if (status.record && status.record.work_date !== t.today(now)) { %>
+    <% if (status.record && status.record.work_date !== today) { %>
       <p class="muted small">※ <%= status.record.work_date %> からの勤務が継続中です（日跨ぎ勤務）。</p>
     <% } %>
   </section>
@@ -51,6 +75,23 @@
 
     <section class="card">
       <div class="card-head">
+        <h2>今後のシフト</h2>
+        <a class="small" href="/shifts">希望シフトを提出 →</a>
+      </div>
+      <% if (upcoming.length) { %>
+        <ul class="plain list-links">
+          <% for (const x of upcoming.slice(0, 6)) { %>
+            <li><span><%= x.work_date.slice(5).replace('-', '/') %>（<%= t.weekdayLabel(x.work_date) %>）<% if (x.work_date === today) { %> <span class="tag tag-leave">今日</span><% } %></span>
+              <span><strong><%= fmtShift(x) %></strong> <span class="muted small"><%= x.store_name || '' %></span></span></li>
+          <% } %>
+        </ul>
+      <% } else { %>
+        <p class="muted small">公開されているシフトはありません。</p>
+      <% } %>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
         <h2><%= sheet.month.replace('-', '年') %>月度の勤務</h2>
         <a class="small" href="/timesheet">勤務表を見る →</a>
       </div>
@@ -58,10 +99,44 @@
       <div class="stats">
         <div class="stat"><span class="stat-label">出勤日数</span><span class="stat-value"><%= s.workDays + s.offDayWorkDays %><small>日</small></span></div>
         <div class="stat"><span class="stat-label">総労働時間</span><span class="stat-value"><%= t.fmtMinutes(s.workMinutes) %></span></div>
-        <div class="stat"><span class="stat-label">残業</span><span class="stat-value"><%= t.fmtMinutes(s.overtimeMinutes) %></span></div>
+        <% if (monthPay) { %>
+          <div class="stat stat-accent"><span class="stat-label">今月の概算給与</span><span class="stat-value"><%= monthPay.total.toLocaleString('ja-JP') %><small>円</small></span></div>
+        <% } else { %>
+          <div class="stat"><span class="stat-label">残業</span><span class="stat-value"><%= t.fmtMinutes(s.overtimeMinutes) %></span></div>
+        <% } %>
         <div class="stat"><span class="stat-label">有給残</span><span class="stat-value"><%= balance %><small>日</small></span></div>
       </div>
+      <% if (monthPay) { %>
+        <details class="pay-detail">
+          <summary class="small">概算給与の内訳</summary>
+          <table class="list compact">
+            <tbody>
+              <tr><td>基本給（時給 <%= currentUser.hourly_wage.toLocaleString('ja-JP') %>円 × <%= t.fmtMinutes(s.workMinutes) %>）</td><td class="num"><%= yen(monthPay.base) %></td></tr>
+              <% if (monthPay.overtime) { %><tr><td>時間外割増</td><td class="num"><%= yen(monthPay.overtime) %></td></tr><% } %>
+              <% if (monthPay.night) { %><tr><td>深夜割増</td><td class="num"><%= yen(monthPay.night) %></td></tr><% } %>
+              <% if (monthPay.holiday) { %><tr><td>休日割増</td><td class="num"><%= yen(monthPay.holiday) %></td></tr><% } %>
+              <% if (monthPay.commute) { %><tr><td>交通費</td><td class="num"><%= yen(monthPay.commute) %></td></tr><% } %>
+              <tr class="strong"><td>合計（税・社会保険料控除前）</td><td class="num"><%= yen(monthPay.total) %></td></tr>
+            </tbody>
+          </table>
+        </details>
+      <% } %>
     </section>
+
+    <% if (yearPay) { const limit = currentUser.annual_income_limit; const pct = limit ? Math.min(100, yearPay.total / limit * 100) : 0; %>
+    <section class="card">
+      <div class="card-head"><h2><%= now.getFullYear() %>年の収入（概算）</h2></div>
+      <div class="income">
+        <span class="income-value"><%= yen(yearPay.total) %></span>
+        <% if (limit) { %><span class="muted small">/ 目安 <%= yen(limit) %>（残り <%= yen(Math.max(0, limit - yearPay.total)) %>）</span><% } %>
+      </div>
+      <% if (limit) { %>
+        <progress class="meter <%= pct >= 90 ? 'meter-warn' : '' %>" value="<%= pct.toFixed(1) %>" max="100" aria-label="年収の目安に対する割合"><%= Math.round(pct) %>%</progress>
+        <% if (pct >= 90) { %><p class="small text-warn">年収の目安に近づいています。シフトについて店長に相談してください。</p><% } %>
+      <% } %>
+      <p class="muted small">1月1日から今日までの打刻にもとづく概算です（交通費を含む）。実際の支給額とは異なる場合があります。</p>
+    </section>
+    <% } %>
 
     <section class="card">
       <div class="card-head">
