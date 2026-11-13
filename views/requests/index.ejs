@@ -1,0 +1,40 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <h1>申請一覧</h1>
+    <p class="muted small">有給休暇の残日数: <strong><%= balance %>日</strong></p>
+  </div>
+  <div class="toolbar">
+    <a class="btn btn-primary" href="/requests/correction/new">打刻修正申請</a>
+    <a class="btn btn-primary" href="/requests/leave/new">休暇申請</a>
+  </div>
+</div>
+<% if (!requests.length) { %>
+  <section class="card"><p class="muted">まだ申請はありません。</p></section>
+<% } else { %>
+<div class="table-wrap">
+  <table class="list">
+    <thead><tr><th>申請日</th><th>種別</th><th>対象日</th><th>内容</th><th>状態</th><th></th></tr></thead>
+    <tbody>
+    <% for (const r of requests) { %>
+      <tr>
+        <td class="nowrap"><%= r.created_at.slice(0, 16) %></td>
+        <td class="nowrap"><span class="tag"><%= TYPE_LABELS[r.type] %></span></td>
+        <td class="nowrap"><%= r.start_date %><%= r.end_date !== r.start_date ? '〜' + r.end_date : '' %></td>
+        <td><%- include('../partials/request-detail', { r }) %></td>
+        <td class="nowrap"><span class="status status-<%= r.status %>"><%= STATUS_LABELS[r.status] %></span></td>
+        <td class="nowrap">
+          <% if (r.status === 'pending') { %>
+            <form method="post" action="/requests/<%= r.id %>/cancel" class="inline-form">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button class="btn btn-sm btn-ghost" data-confirm="この申請を取り消しますか？">取消</button>
+            </form>
+          <% } %>
+        </td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+<%- include('../partials/footer') %>

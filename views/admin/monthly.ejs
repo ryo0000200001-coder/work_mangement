@@ -1,0 +1,45 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <h1>月次集計</h1>
+    <p class="muted small"><%= month.replace('-', '年') %>月度（<%= period.start %> 〜 <%= period.end %>）</p>
+  </div>
+  <div class="toolbar">
+    <nav class="month-nav">
+      <a class="btn btn-sm" href="/admin/timesheets?month=<%= t.shiftMonth(month, -1) %>">← 前月</a>
+      <form method="get" action="/admin/timesheets" class="inline-form" data-autosubmit>
+        <input type="month" name="month" value="<%= month %>" aria-label="対象月">
+      </form>
+      <a class="btn btn-sm" href="/admin/timesheets?month=<%= t.shiftMonth(month, 1) %>">翌月 →</a>
+    </nav>
+    <a class="btn btn-sm" href="/admin/export/summary.csv?month=<%= month %>">集計CSV</a>
+    <a class="btn btn-sm" href="/admin/export/detail.csv?month=<%= month %>">明細CSV（全員）</a>
+  </div>
+</div>
+<div class="table-wrap">
+  <table class="list">
+    <thead>
+      <tr><th>氏名</th><th>部署</th><th>出勤日数</th><th>総労働</th><th>残業</th><th>深夜</th><th>休日労働</th><th>遅刻</th><th>早退</th><th>有給</th><th>欠勤</th><th>未打刻</th></tr>
+    </thead>
+    <tbody>
+    <% for (const r of rows) { const s = r.summary; %>
+      <tr>
+        <td><a href="/admin/timesheets?user=<%= r.user.id %>&month=<%= month %>"><%= r.user.name %></a></td>
+        <td class="muted"><%= r.user.department || '' %></td>
+        <td class="num"><%= s.workDays %>/<%= s.scheduledDays %><%= s.offDayWorkDays ? ' +' + s.offDayWorkDays : '' %></td>
+        <td class="num strong"><%= t.fmtMinutes(s.workMinutes) %></td>
+        <td class="num <%= s.overtimeMinutes > 45 * 60 ? 'text-warn strong' : '' %>"><%= t.fmtMinutes(s.overtimeMinutes) %></td>
+        <td class="num"><%= t.fmtMinutes(s.nightMinutes) %></td>
+        <td class="num"><%= t.fmtMinutes(s.holidayWorkMinutes) %></td>
+        <td class="num"><%= s.lateCount || '' %></td>
+        <td class="num"><%= s.earlyLeaveCount || '' %></td>
+        <td class="num"><%= s.paidLeaveDays || '' %></td>
+        <td class="num"><%= s.absenceDays || '' %></td>
+        <td class="num <%= s.noRecordDays + s.missingClockOutDays ? 'text-warn strong' : '' %>"><%= (s.noRecordDays + s.missingClockOutDays) || '' %></td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+</div>
+<p class="muted small">残業が月45時間（36協定の原則上限）を超える場合は赤字で表示します。</p>
+<%- include('../partials/footer') %>

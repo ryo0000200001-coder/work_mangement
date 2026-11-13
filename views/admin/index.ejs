@@ -1,0 +1,55 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <div>
+    <h1>本日の勤務状況</h1>
+    <p class="muted small"><%= today %>（<%= t.weekdayLabel(today) %>）<% if (dayInfo.isOffDay) { %> <span class="tag tag-off"><%= dayInfo.offReason || '休日' %></span><% } %></p>
+  </div>
+  <div class="toolbar"><a class="btn btn-sm" href="/admin">更新</a></div>
+</div>
+
+<section class="stats stats-wide">
+  <div class="stat"><span class="stat-label">勤務中</span><span class="stat-value"><%= counts.working %><small>人</small></span></div>
+  <div class="stat"><span class="stat-label">休憩中</span><span class="stat-value"><%= counts.break %><small>人</small></span></div>
+  <div class="stat"><span class="stat-label">退勤済</span><span class="stat-value"><%= counts.done %><small>人</small></span></div>
+  <div class="stat"><span class="stat-label">休暇</span><span class="stat-value"><%= counts.leave %><small>人</small></span></div>
+  <div class="stat"><span class="stat-label">未出勤</span><span class="stat-value"><%= counts.off %><small>人</small></span></div>
+  <div class="stat <%= pendingCount ? 'stat-warn' : '' %>"><span class="stat-label">承認待ち申請</span><span class="stat-value"><a href="/admin/requests"><%= pendingCount %></a><small>件</small></span></div>
+</section>
+
+<div class="table-wrap">
+  <table class="list">
+    <thead><tr><th>氏名</th><th>部署</th><th>状態</th><th>出勤</th><th>退勤</th><th>休憩</th><th>勤務時間</th><th>勤務予定</th><th></th></tr></thead>
+    <tbody>
+    <% for (const r of rows) { const d = r.day; const st = r.status.state; %>
+      <tr>
+        <td><a href="/admin/timesheets?user=<%= r.user.id %>"><%= r.user.name %></a></td>
+        <td class="muted"><%= r.user.department || '' %></td>
+        <td class="nowrap">
+          <span class="state-chip state-<%= st %>"><%= STATE_LABELS[st] %></span>
+          <% if (d.leaveLabel) { %><span class="tag tag-leave"><%= d.leaveLabel %></span><% } %>
+          <% if (d.lateMinutes) { %><span class="tag tag-warn">遅刻 <%= d.lateMinutes %>分</span><% } %>
+        </td>
+        <td class="num"><%= t.fmtClock(d.clockIn, d.date) %></td>
+        <td class="num"><%= t.fmtClock(d.clockOut, d.date) %></td>
+        <td class="num"><%= d.hasRecord ? t.fmtMinutes(d.breakMinutes) : '' %></td>
+        <td class="num strong"><%= d.hasRecord ? t.fmtMinutes(d.workMinutes) : '' %></td>
+        <td class="num muted"><%= r.user.work_start %>〜<%= r.user.work_end %></td>
+        <td><a class="small" href="/admin/attendance/<%= r.user.id %>/<%= d.date %>">編集</a></td>
+      </tr>
+    <% } %>
+    <% if (!rows.length) { %><tr><td colspan="9" class="muted">有効な従業員がいません。<a href="/admin/users/new">従業員を登録</a></td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+
+<% if (pending.length) { %>
+<section class="card">
+  <div class="card-head"><h2>承認待ちの申請</h2><a class="small" href="/admin/requests">すべて見る →</a></div>
+  <ul class="plain list-links">
+    <% for (const r of pending) { %>
+      <li><span><span class="tag"><%= TYPE_LABELS[r.type] %></span> <%= r.user_name %> — <%= r.start_date %><%= r.end_date !== r.start_date ? '〜' + r.end_date : '' %></span><span class="muted small"><%= r.created_at.slice(0, 16) %></span></li>
+    <% } %>
+  </ul>
+</section>
+<% } %>
+<%- include('../partials/footer') %>

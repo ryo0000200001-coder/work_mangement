@@ -1,0 +1,86 @@
+<%- include('partials/header') %>
+<%
+  const st = status.state;
+  const stateLabel = { off: '未出勤', working: '勤務中', break: '休憩中', done: '退勤済み' }[st];
+  const s = sheet.summary;
+%>
+<div class="grid-dash">
+  <section class="card punch-card">
+    <div class="clock">
+      <div class="clock-date" data-clock-date><%= t.today(now) %>（<%= t.weekdayLabel(t.today(now)) %>）</div>
+      <div class="clock-time" data-clock-time><%= t.toLocalISO(now).slice(11, 19) %></div>
+    </div>
+    <div class="state state-<%= st %>"><span class="dot"></span><%= stateLabel %>
+      <% if (todayRow.leaveLabel) { %><span class="tag tag-leave"><%= todayRow.leaveLabel %></span><% } %>
+      <% if (todayRow.isOffDay) { %><span class="tag tag-off"><%= todayRow.offReason || '休日' %></span><% } %>
+    </div>
+    <form method="post" action="/punch" class="punch-buttons" data-once>
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button name="action" value="clock_in" class="punch punch-in" <%= st === 'off' ? '' : 'disabled' %>>出勤</button>
+      <button name="action" value="clock_out" class="punch punch-out" <%= st === 'working' || st === 'break' ? '' : 'disabled' %> data-confirm="退勤を記録します。よろしいですか？">退勤</button>
+      <button name="action" value="break_start" class="punch punch-break" <%= st === 'working' ? '' : 'disabled' %>>休憩開始</button>
+      <button name="action" value="break_end" class="punch punch-break" <%= st === 'break' ? '' : 'disabled' %>>休憩終了</button>
+    </form>
+    <dl class="today-stats">
+      <div><dt>出勤</dt><dd><%= t.fmtClock(todayRow.clockIn, todayRow.date) || '--:--' %></dd></div>
+      <div><dt>退勤</dt><dd><%= t.fmtClock(todayRow.clockOut, todayRow.date) || '--:--' %></dd></div>
+      <div><dt>休憩</dt><dd><%= todayRow.hasRecord ? t.fmtMinutes(todayRow.breakMinutes) : '-' %></dd></div>
+      <div><dt>勤務時間</dt><dd><%= todayRow.hasRecord ? t.fmtMinutes(todayRow.workMinutes) : '-' %></dd></div>
+    </dl>
+    <% if (status.record && status.record.work_date !== t.today(now)) { %>
+      <p class="muted small">※ <%= status.record.work_date %> からの勤務が継続中です（日跨ぎ勤務）。</p>
+    <% } %>
+  </section>
+
+  <div class="stack">
+    <% if (alerts.length) { %>
+    <section class="card card-warn">
+      <h2>打刻漏れの可能性があります</h2>
+      <ul class="plain list-links">
+        <% for (const d of alerts.slice(0, 5)) { %>
+          <li><span><%= d.date %>（<%= d.weekdayLabel %>）<%= d.missingClockOut ? '退勤打刻なし' : '出勤記録なし' %></span>
+            <span class="actions">
+              <a href="/requests/correction/new?date=<%= d.date %>">修正申請</a>
+              <% if (d.noRecord) { %><a href="/requests/leave/new?date=<%= d.date %>">休暇申請</a><% } %>
+            </span></li>
+        <% } %>
+      </ul>
+      <% if (alerts.length > 5) { %><p class="small muted">ほか <%= alerts.length - 5 %> 件（<a href="/timesheet">勤務表</a>で確認）</p><% } %>
+    </section>
+    <% } %>
+
+    <section class="card">
+      <div class="card-head">
+        <h2><%= sheet.month.replace('-', '年') %>月度の勤務</h2>
+        <a class="small" href="/timesheet">勤務表を見る →</a>
+      </div>
+      <p class="muted small"><%= sheet.period.start %> 〜 <%= sheet.period.end %></p>
+      <div class="stats">
+        <div class="stat"><span class="stat-label">出勤日数</span><span class="stat-value"><%= s.workDays + s.offDayWorkDays %><small>日</small></span></div>
+        <div class="stat"><span class="stat-label">総労働時間</span><span class="stat-value"><%= t.fmtMinutes(s.workMinutes) %></span></div>
+        <div class="stat"><span class="stat-label">残業</span><span class="stat-value"><%= t.fmtMinutes(s.overtimeMinutes) %></span></div>
+        <div class="stat"><span class="stat-label">有給残</span><span class="stat-value"><%= balance %><small>日</small></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>申請</h2>
+        <span class="actions">
+          <a class="btn btn-sm" href="/requests/correction/new">打刻修正</a>
+          <a class="btn btn-sm" href="/requests/leave/new">休暇申請</a>
+        </span>
+      </div>
+      <% if (myPending.length) { %>
+        <ul class="plain list-links">
+          <% for (const r of myPending) { %>
+            <li><span><span class="tag"><%= TYPE_LABELS[r.type] %></span> <%= r.start_date %><%= r.end_date !== r.start_date ? '〜' + r.end_date : '' %></span><span class="status status-pending">承認待ち</span></li>
+          <% } %>
+        </ul>
+      <% } else { %>
+        <p class="muted small">承認待ちの申請はありません。</p>
+      <% } %>
+    </section>
+  </div>
+</div>
+<%- include('partials/footer') %>

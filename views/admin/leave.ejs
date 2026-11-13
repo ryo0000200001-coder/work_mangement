@@ -1,0 +1,54 @@
+<%- include('../partials/header') %>
+<div class="page-head"><h1>有給休暇の管理</h1></div>
+<div class="grid-2">
+  <section class="card">
+    <h2>残日数一覧</h2>
+    <table class="list compact">
+      <thead><tr><th>氏名</th><th>入社日</th><th class="num">残日数</th></tr></thead>
+      <tbody>
+      <% for (const u of users) { %>
+        <tr class="<%= target && target.id === u.id ? 'selected' : '' %>">
+          <td><a href="/admin/leave?user=<%= u.id %>"><%= u.name %></a></td>
+          <td class="muted"><%= u.hire_date || '' %></td>
+          <td class="num strong"><%= u.balance %>日</td>
+        </tr>
+      <% } %>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <% if (!target) { %>
+      <h2>付与・調整</h2>
+      <p class="muted">左の一覧から従業員を選択してください。</p>
+    <% } else { %>
+      <h2><%= target.name %> さん <span class="muted">残 <%= balance %>日</span></h2>
+      <form method="post" action="/admin/leave/grant" class="form">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="user_id" value="<%= target.id %>">
+        <div class="form-row">
+          <label>日数 <span class="muted small">マイナスで減算（時効消滅など）</span>
+            <input name="days" inputmode="decimal" required placeholder="例: 10">
+          </label>
+          <label>基準日
+            <input type="date" name="entry_date" value="<%= today %>">
+          </label>
+        </div>
+        <label>メモ
+          <input name="note" maxlength="200" placeholder="例: 2026年度 定期付与">
+        </label>
+        <button class="btn btn-primary" type="submit">登録する</button>
+      </form>
+      <h3>履歴</h3>
+      <table class="list compact">
+        <thead><tr><th>日付</th><th>内容</th><th class="num">日数</th><th>登録者</th></tr></thead>
+        <tbody>
+        <% for (const l of ledger) { %>
+          <tr><td class="nowrap"><%= l.entry_date %></td><td><%= l.note || '' %></td><td class="num <%= l.days < 0 ? 'text-warn' : '' %>"><%= l.days > 0 ? '+' : '' %><%= l.days %></td><td class="muted"><%= l.created_by_name || '' %></td></tr>
+        <% } %>
+        <% if (!ledger.length) { %><tr><td colspan="4" class="muted">履歴はありません。</td></tr><% } %>
+        </tbody>
+      </table>
+    <% } %>
+  </section>
+</div>
+<%- include('../partials/footer') %>

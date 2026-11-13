@@ -1,0 +1,64 @@
+<%- include('../partials/header') %>
+<section class="card narrow">
+  <h1>設定</h1>
+  <%- include('../partials/errors') %>
+  <form method="post" action="/admin/settings" class="form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <label>会社名
+      <input name="company_name" value="<%= values.company_name %>" maxlength="100">
+    </label>
+
+    <h2>就業ルール</h2>
+    <div class="form-row">
+      <label>所定労働時間（時間/日）
+        <input name="standard_hours" value="<%= values.standard_minutes / 60 %>" inputmode="decimal" required>
+      </label>
+      <label>締め日
+        <select name="closing_day">
+          <option value="0" <%= values.closing_day === 0 ? 'selected' : '' %>>月末締め</option>
+          <% for (let d = 1; d <= 28; d++) { %><option value="<%= d %>" <%= values.closing_day === d ? 'selected' : '' %>><%= d %>日締め</option><% } %>
+        </select>
+      </label>
+    </div>
+    <div class="form-row">
+      <label>新規従業員の始業時刻
+        <input type="time" name="default_work_start" value="<%= values.default_work_start %>" required>
+      </label>
+      <label>新規従業員の終業時刻
+        <input type="time" name="default_work_end" value="<%= values.default_work_end %>" required>
+      </label>
+    </div>
+    <fieldset>
+      <legend>週休日</legend>
+      <div class="check-group">
+        <% t.WEEKDAYS.forEach((w, i) => { %>
+          <label class="check"><input type="checkbox" name="weekly_holidays" value="<%= i %>" <%= values.weekly_holidays.includes(i) ? 'checked' : '' %>> <%= w %></label>
+        <% }) %>
+      </div>
+    </fieldset>
+
+    <h2>打刻の丸め</h2>
+    <p class="muted small">打刻の生データは保持したまま、集計時のみ丸めます。</p>
+    <div class="form-row">
+      <label>出勤（切り上げ）
+        <select name="rounding_in">
+          <% for (const u of [1, 5, 10, 15, 30]) { %><option value="<%= u %>" <%= values.rounding_in === u ? 'selected' : '' %>><%= u === 1 ? '丸めない（1分単位）' : u + '分単位' %></option><% } %>
+        </select>
+      </label>
+      <label>退勤（切り捨て）
+        <select name="rounding_out">
+          <% for (const u of [1, 5, 10, 15, 30]) { %><option value="<%= u %>" <%= values.rounding_out === u ? 'selected' : '' %>><%= u === 1 ? '丸めない（1分単位）' : u + '分単位' %></option><% } %>
+        </select>
+      </label>
+    </div>
+    <p class="muted small">※ 厚生労働省の通達上、日々の労働時間の切り捨ては原則認められていません。丸めを使う場合は社内規程との整合を確認してください。</p>
+
+    <h2>休憩</h2>
+    <label class="check"><input type="checkbox" name="auto_break" value="1" <%= values.auto_break ? 'checked' : '' %>> 休憩打刻が法定休憩（6時間超45分・8時間超60分）に満たない場合、不足分を自動控除する</label>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">保存する</button>
+    </div>
+  </form>
+</section>
+<%- include('../partials/footer') %>

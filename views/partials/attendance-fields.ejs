@@ -1,0 +1,30 @@
+<%# 出勤・退勤・休憩の入力欄（打刻修正申請・管理者修正で共通） %>
+<div class="form-row">
+  <label>出勤時刻
+    <input type="time" name="clock_in" value="<%= form.clock_in %>" required>
+  </label>
+  <label>退勤時刻
+    <input type="time" name="clock_out" value="<%= form.clock_out %>">
+  </label>
+  <label class="check check-inline">
+    <input type="checkbox" name="clock_out_next_day" value="1" <%= form.clock_out_next_day ? 'checked' : '' %>> 退勤は翌日
+  </label>
+</div>
+<fieldset class="breaks">
+  <legend>休憩 <span class="muted small">（出勤時刻より前の時刻は翌日として扱います）</span></legend>
+  <div data-break-list>
+    <% const brs = form.breaks && form.breaks.length ? form.breaks : [{ start: '', end: '' }];
+       brs.forEach((b, i) => { %>
+      <div class="form-row break-row" data-break-row>
+        <label>開始 <input type="time" name="break_start" value="<%= b.start %>"></label>
+        <span class="tilde">〜</span>
+        <label>終了 <input type="time" name="break_end" value="<%= b.end %>"></label>
+        <button type="button" class="btn btn-sm btn-ghost" data-break-remove aria-label="この休憩を削除">削除</button>
+      </div>
+    <% }) %>
+  </div>
+  <button type="button" class="btn btn-sm" data-break-add>＋ 休憩を追加</button>
+</fieldset>
+<label>備考
+  <input name="note" value="<%= form.note || '' %>" maxlength="500">
+</label>

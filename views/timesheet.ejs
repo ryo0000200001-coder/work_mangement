@@ -1,0 +1,91 @@
+<%- include('partials/header') %>
+<%
+  const s = sheet.summary;
+  const today = t.today();
+  const base = isAdminView ? `/admin/timesheets?user=${target.id}&` : '/timesheet?';
+  const fmtB = (m) => t.fmtMinutes(m, { blankZero: true });
+%>
+<div class="page-head">
+  <div>
+    <h1>勤務表<% if (isAdminView) { %> <span class="muted">— <%= target.name %>（<%= target.login_id %>）</span><% } %></h1>
+    <p class="muted small"><%= sheet.period.start %> 〜 <%= sheet.period.end %>
+      ／ 勤務時間 <%= target.work_start %>〜<%= target.work_end %></p>
+  </div>
+  <div class="toolbar">
+    <% if (isAdminView) { %>
+      <form method="get" action="/admin/timesheets" class="inline-form" data-autosubmit>
+        <input type="hidden" name="month" value="<%= sheet.month %>">
+        <select name="user" aria-label="従業員">
+          <% for (const u of users) { %><option value="<%= u.id %>" <%= u.id === target.id ? 'selected' : '' %>><%= u.name %><%= u.active ? '' : '（無効）' %></option><% } %>
+        </select>
+      </form>
+    <% } %>
+    <nav class="month-nav" aria-label="月の切り替え">
+      <a class="btn btn-sm" href="<%= base %>month=<%= t.shiftMonth(sheet.month, -1) %>">← 前月</a>
+      <form method="get" action="<%= isAdminView ? '/admin/timesheets' : '/timesheet' %>" class="inline-form" data-autosubmit>
+        <% if (isAdminView) { %><input type="hidden" name="user" value="<%= target.id %>"><% } %>
+        <input type="month" name="month" value="<%= sheet.month %>" aria-label="対象月">
+      </form>
+      <a class="btn btn-sm" href="<%= base %>month=<%= t.shiftMonth(sheet.month, 1) %>">翌月 →</a>
+    </nav>
+    <% if (isAdminView) { %>
+      <a class="btn btn-sm" href="/admin/export/detail.csv?user=<%= target.id %>&month=<%= sheet.month %>">CSV</a>
+    <% } %>
+    <button type="button" class="btn btn-sm" data-print>印刷</button>
+  </div>
+</div>
+
+<section class="stats stats-wide">
+  <div class="stat"><span class="stat-label">出勤日数</span><span class="stat-value"><%= s.workDays %><small>/<%= s.scheduledDays %>日</small></span></div>
+  <div class="stat"><span class="stat-label">総労働時間</span><span class="stat-value"><%= t.fmtMinutes(s.workMinutes) %></span></div>
+  <div class="stat"><span class="stat-label">残業</span><span class="stat-value"><%= t.fmtMinutes(s.overtimeMinutes) %></span></div>
+  <div class="stat"><span class="stat-label">深夜</span><span class="stat-value"><%= t.fmtMinutes(s.nightMinutes) %></span></div>
+  <div class="stat"><span class="stat-label">休日労働</span><span class="stat-value"><%= t.fmtMinutes(s.holidayWorkMinutes) %><small>（<%= s.offDayWorkDays %>日）</small></span></div>
+  <div class="stat"><span class="stat-label">遅刻・早退</span><span class="stat-value"><%= s.lateCount %><small>回</small> / <%= s.earlyLeaveCount %><small>回</small></span></div>
+  <div class="stat"><span class="stat-label">有給取得</span><span class="stat-value"><%= s.paidLeaveDays %><small>日</small></span></div>
+  <div class="stat <%= s.noRecordDays + s.missingClockOutDays ? 'stat-warn' : '' %>"><span class="stat-label">未打刻</span><span class="stat-value"><%= s.noRecordDays + s.missingClockOutDays %><small>日</small></span></div>
+</section>
+
+<div class="table-wrap">
+<table class="sheet">
+  <thead>
+    <tr>
+      <th>日付</th><th>区分</th><th>出勤</th><th>退勤</th><th>休憩</th><th>労働</th>
+      <th>残業</th><th>深夜</th><th>休日</th><th>遅刻</th><th>早退</th><th class="col-note">備考</th><th class="no-print"></th>
+    </tr>
+  </thead>
+  <tbody>
+  <% for (const d of sheet.days) {
+       const cls = [d.isOffDay ? 'off' : '', d.weekday === 0 ? 'sun' : '', d.weekday === 6 ? 'sat' : '', d.date === today ? 'today' : '', d.noRecord || d.missingClockOut ? 'warn' : ''].join(' ');
+  %>
+    <tr class="<%= cls %>">
+      <td class="nowrap"><%= d.date.slice(5).replace('-', '/') %>（<%= d.weekdayLabel %>）</td>
+      <td class="nowrap">
+        <% if (d.leaveLabel) { %><span class="tag tag-leave"><%= d.leaveLabel %></span><% } %>
+        <% if (d.isOffDay) { %><span class="tag tag-off"><%= d.offReason || '休日' %></span><% } %>
+        <% if (d.hasPending) { %><span class="tag tag-pending">申請中</span><% } %>
+      </td>
+      <td class="num"><%= t.fmtClock(d.clockIn, d.date) %></td>
+      <td class="num"><% if (d.missingClockOut) { %><span class="text-warn">未打刻</span><% } else if (d.inProgress) { %><span class="muted">勤務中</span><% } else { %><%= t.fmtClock(d.clockOut, d.date) %><% } %></td>
+      <td class="num"><%= d.hasRecord && !d.missingClockOut ? t.fmtMinutes(d.breakMinutes) : '' %><% if (d.autoBreakMinutes) { %><span class="auto" title="法定休憩の不足分 <%= d.autoBreakMinutes %>分を自動控除">*</span><% } %></td>
+      <td class="num strong"><%= d.hasRecord && !d.missingClockOut ? t.fmtMinutes(d.workMinutes) : '' %></td>
+      <td class="num"><%= fmtB(d.overtimeMinutes) %></td>
+      <td class="num"><%= fmtB(d.nightMinutes) %></td>
+      <td class="num"><%= fmtB(d.holidayWorkMinutes) %></td>
+      <td class="num text-warn"><%= fmtB(d.lateMinutes) %></td>
+      <td class="num text-warn"><%= fmtB(d.earlyLeaveMinutes) %></td>
+      <td class="col-note"><%= d.noRecord ? '出勤記録なし' : '' %><%= d.note %></td>
+      <td class="no-print nowrap">
+        <% if (isAdminView) { %>
+          <a href="/admin/attendance/<%= target.id %>/<%= d.date %>">編集</a>
+        <% } else if (d.date <= today) { %>
+          <a href="/requests/correction/new?date=<%= d.date %>">修正申請</a>
+        <% } %>
+      </td>
+    </tr>
+  <% } %>
+  </tbody>
+</table>
+</div>
+<p class="muted small">* 休憩の打刻が法定休憩（6時間超で45分・8時間超で60分）に満たない場合、不足分を自動控除しています。<% if (isAdminView && typeof balance !== 'undefined') { %>　有給残日数: <strong><%= balance %>日</strong><% } %></p>
+<%- include('partials/footer') %>

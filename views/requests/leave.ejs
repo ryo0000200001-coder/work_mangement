@@ -1,0 +1,29 @@
+<%- include('../partials/header') %>
+<section class="card narrow">
+  <h1>休暇申請</h1>
+  <p class="muted small">有給休暇の残日数: <strong><%= balance %>日</strong>（期間中の休日は自動的に除外されます）</p>
+  <%- include('../partials/errors') %>
+  <form method="post" action="/requests/leave" class="form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <label>休暇種別
+      <select name="leave_type" required>
+        <% for (const [k, v] of Object.entries(LEAVE_TYPES)) { %>
+          <option value="<%= k %>" <%= values.leave_type === k ? 'selected' : '' %>><%= v.label %></option>
+        <% } %>
+      </select>
+    </label>
+    <div class="form-row">
+      <label>開始日 <input type="date" name="start_date" value="<%= values.start_date %>" required></label>
+      <span class="tilde">〜</span>
+      <label>終了日 <input type="date" name="end_date" value="<%= values.end_date %>" required></label>
+    </div>
+    <label>理由・備考
+      <textarea name="reason" rows="2" maxlength="500"><%= values.reason %></textarea>
+    </label>
+    <div class="form-actions">
+      <a class="btn" href="/requests">キャンセル</a>
+      <button class="btn btn-primary" type="submit">申請する</button>
+    </div>
+  </form>
+</section>
+<%- include('../partials/footer') %>

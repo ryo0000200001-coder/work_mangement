@@ -1,0 +1,29 @@
+<%- include('../partials/header') %>
+<section class="card narrow">
+  <h1>打刻修正申請</h1>
+  <p class="muted small">打刻忘れ・誤りがあった日の正しい時刻を入力してください。管理者の承認後に勤務表へ反映されます。</p>
+  <%- include('../partials/errors') %>
+  <form method="get" action="/requests/correction/new" class="inline-form" data-autosubmit>
+    <label>対象日 <input type="date" name="date" value="<%= date %>" max="<%= t.today() %>"></label>
+  </form>
+  <div class="current-box">
+    <strong>現在の記録（<%= date %>）:</strong>
+    <% if (current && current.clock_in) { %>
+      出勤 <%= t.fmtClock(current.clock_in, date) %> ／ 退勤 <%= current.clock_out ? t.fmtClock(current.clock_out, date) : '未打刻' %>
+      <% if (current.breaks.length) { %>／ 休憩 <%= current.breaks.map(b => t.fmtClock(b.start_at, date) + '〜' + (b.end_at ? t.fmtClock(b.end_at, date) : '')).join(', ') %><% } %>
+    <% } else { %>記録なし<% } %>
+  </div>
+  <form method="post" action="/requests/correction" class="form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input type="hidden" name="date" value="<%= date %>">
+    <%- include('../partials/attendance-fields', { form }) %>
+    <label>申請理由 <span class="req">必須</span>
+      <textarea name="reason" rows="2" maxlength="500" required placeholder="例: 退勤打刻を忘れたため"><%= reason %></textarea>
+    </label>
+    <div class="form-actions">
+      <a class="btn" href="/requests">キャンセル</a>
+      <button class="btn btn-primary" type="submit">申請する</button>
+    </div>
+  </form>
+</section>
+<%- include('../partials/footer') %>

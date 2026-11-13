@@ -1,0 +1,50 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <h1>休日カレンダー <span class="muted"><%= year %>年</span></h1>
+  <nav class="month-nav">
+    <a class="btn btn-sm" href="/admin/holidays?year=<%= year - 1 %>">← <%= year - 1 %>年</a>
+    <a class="btn btn-sm" href="/admin/holidays?year=<%= year + 1 %>"><%= year + 1 %>年 →</a>
+  </nav>
+</div>
+<p class="muted small">週休日（<%= settings.weekly_holidays.map(n => t.WEEKDAYS[n]).join('・') || 'なし' %>）・国民の祝日・会社休日は「休日」として扱われ、その日の労働は休日労働として集計されます。週休日は「設定」で変更できます。</p>
+<div class="grid-2">
+  <section class="card">
+    <h2>会社休日</h2>
+    <form method="post" action="/admin/holidays" class="form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-row">
+        <label>開始日 <input type="date" name="date" required></label>
+        <label>終了日（任意） <input type="date" name="end_date"></label>
+      </div>
+      <label>名称 <input name="name" maxlength="50" placeholder="例: 夏季休暇・年末年始休暇・創立記念日"></label>
+      <button class="btn btn-primary" type="submit">追加</button>
+    </form>
+    <table class="list compact">
+      <tbody>
+      <% for (const h of company) { %>
+        <tr>
+          <td class="nowrap"><%= h.date %>（<%= t.weekdayLabel(h.date) %>）</td><td><%= h.name %></td>
+          <td class="num">
+            <form method="post" action="/admin/holidays/<%= h.date %>/delete" class="inline-form">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button class="btn btn-sm btn-ghost" data-confirm="<%= h.date %> の会社休日を削除しますか？">削除</button>
+            </form>
+          </td>
+        </tr>
+      <% } %>
+      <% if (!company.length) { %><tr><td class="muted">登録はありません。</td></tr><% } %>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>国民の祝日（自動計算）</h2>
+    <table class="list compact">
+      <tbody>
+      <% for (const [d, n] of national) { %>
+        <tr><td class="nowrap"><%= d %>（<%= t.weekdayLabel(d) %>）</td><td><%= n %></td></tr>
+      <% } %>
+      </tbody>
+    </table>
+  </section>
+</div>
+<%- include('../partials/footer') %>

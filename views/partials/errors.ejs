@@ -1,0 +1,7 @@
+<% if (errors && errors.length) { %>
+<div class="alert alert-error" role="alert">
+  <ul class="plain">
+    <% for (const e of errors) { %><li><%= e %></li><% } %>
+  </ul>
+</div>
+<% } %>

@@ -1,0 +1,23 @@
+<%- include('../partials/header') %>
+<div class="page-head"><h1>操作ログ</h1></div>
+<div class="table-wrap">
+  <table class="list compact">
+    <thead><tr><th>日時</th><th>操作者</th><th>操作</th><th>詳細</th><th>IP</th></tr></thead>
+    <tbody>
+    <% for (const l of logs) { %>
+      <tr>
+        <td class="nowrap"><%= l.created_at %></td>
+        <td><%= l.user_name || '-' %></td>
+        <td class="nowrap"><%= ACTION_LABELS[l.action] || l.action %></td>
+        <td class="small mono detail"><%= l.target_type ? l.target_type + '#' + l.target_id + ' ' : '' %><%= l.detail || '' %></td>
+        <td class="small muted"><%= l.ip || '' %></td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+</div>
+<nav class="month-nav">
+  <% if (page > 1) { %><a class="btn btn-sm" href="/admin/audit?page=<%= page - 1 %>">← 新しい</a><% } %>
+  <% if (hasNext) { %><a class="btn btn-sm" href="/admin/audit?page=<%= page + 1 %>">古い →</a><% } %>
+</nav>
+<%- include('../partials/footer') %>

@@ -1,0 +1,48 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <h1>申請の承認</h1>
+  <nav class="tabs">
+    <% for (const [k, label] of [['pending', '承認待ち'], ['approved', '承認済み'], ['rejected', '却下'], ['cancelled', '取消'], ['all', 'すべて']]) { %>
+      <a href="/admin/requests?status=<%= k %>" class="<%= filter === k ? 'active' : '' %>"><%= label %></a>
+    <% } %>
+  </nav>
+</div>
+<% if (!requests.length) { %>
+  <section class="card"><p class="muted">該当する申請はありません。</p></section>
+<% } %>
+<div class="req-cards">
+<% for (const r of requests) { %>
+  <article class="card req-card">
+    <header class="req-head">
+      <div>
+        <span class="tag"><%= TYPE_LABELS[r.type] %></span>
+        <strong><%= r.user_name %></strong> <span class="muted small"><%= r.login_id %><%= r.department ? ' / ' + r.department : '' %></span>
+      </div>
+      <span class="status status-<%= r.status %>"><%= STATUS_LABELS[r.status] %></span>
+    </header>
+    <div class="req-body">
+      <div class="req-date"><%= r.start_date %>（<%= t.weekdayLabel(r.start_date) %>）<%= r.end_date !== r.start_date ? '〜 ' + r.end_date + '（' + t.weekdayLabel(r.end_date) + '）' : '' %></div>
+      <%- include('../partials/request-detail', { r }) %>
+      <div class="muted small">申請日時: <%= r.created_at.slice(0, 16) %><%= r.reviewed_at ? ' ／ 処理日時: ' + r.reviewed_at.slice(0, 16) : '' %></div>
+    </div>
+    <% if (r.status === 'pending') { %>
+      <form method="post" class="req-actions">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="back" value="/admin/requests?status=<%= filter %>">
+        <input name="comment" placeholder="コメント（任意）" maxlength="500">
+        <button class="btn btn-ghost" formaction="/admin/requests/<%= r.id %>/reject" data-confirm="この申請を却下しますか？">却下</button>
+        <button class="btn btn-primary" formaction="/admin/requests/<%= r.id %>/approve">承認</button>
+      </form>
+      <% if (r.type === 'correction') { %><a class="small" href="/admin/timesheets?user=<%= r.user_id %>&month=<%= t.monthOf(r.start_date, settings.closing_day) %>">勤務表を確認</a><% } %>
+    <% } else if (r.status === 'approved' && r.type === 'leave') { %>
+      <form method="post" action="/admin/requests/<%= r.id %>/revoke" class="req-actions">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="back" value="/admin/requests?status=<%= filter %>">
+        <input name="comment" placeholder="取消理由（任意）" maxlength="500">
+        <button class="btn btn-ghost" data-confirm="承認済みの休暇を取り消します（有給は残日数に戻ります）。よろしいですか？">休暇を取り消す</button>
+      </form>
+    <% } %>
+  </article>
+<% } %>
+</div>
+<%- include('../partials/footer') %>

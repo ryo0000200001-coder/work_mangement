@@ -1,0 +1,26 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <h1>従業員</h1>
+  <div class="toolbar"><a class="btn btn-primary" href="/admin/users/new">＋ 従業員を登録</a></div>
+</div>
+<div class="table-wrap">
+  <table class="list">
+    <thead><tr><th>ログインID</th><th>氏名</th><th>部署</th><th>権限</th><th>勤務時間</th><th>所定</th><th>有給残</th><th>状態</th><th></th></tr></thead>
+    <tbody>
+    <% for (const u of users) { %>
+      <tr class="<%= u.active ? '' : 'inactive' %>">
+        <td><%= u.login_id %></td>
+        <td><%= u.name %></td>
+        <td><%= u.department || '' %></td>
+        <td><%= u.role === 'admin' ? '管理者' : '一般' %></td>
+        <td class="num"><%= u.work_start %>〜<%= u.work_end %></td>
+        <td class="num"><%= u.standard_minutes ? t.fmtMinutes(u.standard_minutes) : t.fmtMinutes(settings.standard_minutes) %></td>
+        <td class="num"><a href="/admin/leave?user=<%= u.id %>"><%= u.balance %>日</a></td>
+        <td><%= u.active ? '有効' : '無効' %><%= u.must_change_password ? '（初回PW未変更）' : '' %></td>
+        <td class="nowrap"><a href="/admin/users/<%= u.id %>/edit">編集</a> ／ <a href="/admin/timesheets?user=<%= u.id %>">勤務表</a></td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+</div>
+<%- include('../partials/footer') %>

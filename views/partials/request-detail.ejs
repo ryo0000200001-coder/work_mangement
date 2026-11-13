@@ -1,0 +1,23 @@
+<% const p = r.payload; const d0 = r.start_date; %>
+<% if (r.type === 'correction') { %>
+  <div class="req-detail">
+    <div><span class="muted small">修正後:</span>
+      出勤 <%= t.fmtClock(p.clock_in, d0) %> ／ 退勤 <%= p.clock_out ? t.fmtClock(p.clock_out, d0) : '—' %>
+      <% if (p.breaks && p.breaks.length) { %>／ 休憩 <%= p.breaks.map(b => t.fmtClock(b.start, d0) + '〜' + t.fmtClock(b.end, d0)).join(', ') %><% } %>
+      <% if (p.note) { %>／ 備考: <%= p.note %><% } %>
+    </div>
+    <div class="muted small">修正前:
+      <% if (p.before && p.before.clock_in) { %>
+        出勤 <%= t.fmtClock(p.before.clock_in, d0) %> ／ 退勤 <%= p.before.clock_out ? t.fmtClock(p.before.clock_out, d0) : '未打刻' %>
+        <% if (p.before.breaks && p.before.breaks.length) { %>／ 休憩 <%= p.before.breaks.map(b => t.fmtClock(b.start, d0) + '〜' + (b.end ? t.fmtClock(b.end, d0) : '')).join(', ') %><% } %>
+      <% } else { %>記録なし<% } %>
+    </div>
+  </div>
+<% } else { %>
+  <div class="req-detail">
+    <%= (LEAVE_TYPES[p.leave_type] || {}).label || p.leave_type %>
+    <span class="muted small">（対象 <%= (p.dates || []).length %>日<%= LEAVE_TYPES[p.leave_type] && LEAVE_TYPES[p.leave_type].paid ? ' / 有給 ' + p.days + '日消化' : '' %>）</span>
+  </div>
+<% } %>
+<% if (r.reason) { %><div class="small">理由: <%= r.reason %></div><% } %>
+<% if (r.review_comment) { %><div class="small muted">コメント（<%= r.reviewer_name || '' %>）: <%= r.review_comment %></div><% } %>

@@ -1,0 +1,67 @@
+<%- include('../partials/header') %>
+<section class="card narrow">
+  <h1><%= title %></h1>
+  <%- include('../partials/errors') %>
+  <form method="post" action="<%= isNew ? '/admin/users' : '/admin/users/' + target.id %>" class="form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="form-row">
+      <label>ログインID（社員番号など）
+        <input name="login_id" value="<%= values.login_id %>" required autocapitalize="off" autocomplete="off">
+      </label>
+      <label>氏名
+        <input name="name" value="<%= values.name %>" required maxlength="100">
+      </label>
+    </div>
+    <div class="form-row">
+      <label>部署
+        <input name="department" value="<%= values.department || '' %>" maxlength="100">
+      </label>
+      <label>メールアドレス（任意）
+        <input type="email" name="email" value="<%= values.email || '' %>">
+      </label>
+    </div>
+    <div class="form-row">
+      <label>始業時刻
+        <input type="time" name="work_start" value="<%= values.work_start %>" required>
+      </label>
+      <label>終業時刻
+        <input type="time" name="work_end" value="<%= values.work_end %>" required>
+      </label>
+      <label>所定労働時間（時間/日）
+        <input name="standard_hours" value="<%= values.standard_hours || '' %>" inputmode="decimal" placeholder="既定 <%= settings.standard_minutes / 60 %>">
+      </label>
+    </div>
+    <div class="form-row">
+      <label>入社日
+        <input type="date" name="hire_date" value="<%= values.hire_date || '' %>">
+      </label>
+      <label>権限
+        <select name="role">
+          <option value="employee" <%= values.role !== 'admin' ? 'selected' : '' %>>一般</option>
+          <option value="admin" <%= values.role === 'admin' ? 'selected' : '' %>>管理者</option>
+        </select>
+      </label>
+    </div>
+    <% if (isNew) { %>
+      <label>初期パスワード <span class="muted small">8文字以上・英字と数字を含む（初回ログイン時に本人が変更）</span>
+        <input name="password" type="text" required minlength="8" autocomplete="off" value="<%= values.password || '' %>">
+      </label>
+    <% } else { %>
+      <label class="check"><input type="checkbox" name="active" value="1" <%= Number(values.active) ? 'checked' : '' %>> 有効（チェックを外すとログイン不可・一覧から除外）</label>
+    <% } %>
+    <div class="form-actions">
+      <a class="btn" href="/admin/users">戻る</a>
+      <button class="btn btn-primary" type="submit"><%= isNew ? '登録する' : '保存する' %></button>
+    </div>
+  </form>
+  <% if (!isNew) { %>
+    <hr>
+    <h2>パスワードの再発行</h2>
+    <p class="muted small">仮パスワードを発行し、本人のログイン中のセッションを無効にします。次回ログイン時にパスワード変更が求められます。</p>
+    <form method="post" action="/admin/users/<%= target.id %>/reset-password">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button class="btn" data-confirm="<%= target.name %> さんのパスワードを再発行しますか？">仮パスワードを発行</button>
+    </form>
+  <% } %>
+</section>
+<%- include('../partials/footer') %>

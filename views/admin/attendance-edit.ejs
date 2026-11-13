@@ -1,0 +1,24 @@
+<%- include('../partials/header') %>
+<section class="card narrow">
+  <h1>勤怠の修正</h1>
+  <p><strong><%= target.name %></strong>（<%= target.login_id %>）— <%= date %>（<%= t.weekdayLabel(date) %>）</p>
+  <%- include('../partials/errors') %>
+  <form method="post" action="/admin/attendance/<%= target.id %>/<%= date %>" class="form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <%- include('../partials/attendance-fields', { form }) %>
+    <p class="muted small">変更内容は操作ログに記録されます。退勤時刻を空欄にすると「勤務中」扱いになります。</p>
+    <div class="form-actions">
+      <a class="btn" href="/admin/timesheets?user=<%= target.id %>&month=<%= t.monthOf(date, settings.closing_day) %>">戻る</a>
+      <button class="btn btn-primary" type="submit">保存する</button>
+    </div>
+  </form>
+  <% if (rec) { %>
+    <hr>
+    <form method="post" action="/admin/attendance/<%= target.id %>/<%= date %>">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="delete" value="1">
+      <button class="btn btn-danger" data-confirm="この日の勤怠記録を削除しますか？">この日の記録を削除</button>
+    </form>
+  <% } %>
+</section>
+<%- include('../partials/footer') %>
